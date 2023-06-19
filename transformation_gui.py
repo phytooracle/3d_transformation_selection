@@ -20,6 +20,7 @@ from plyfile import PlyData
 import time
 import pandas as pd
 import multiprocessing
+import json
 
 
 root = tk.Tk()
@@ -45,10 +46,10 @@ def select_dir_path(dir_paths):
         selected_dir_path = dir_paths[event.widget.get()]
 
     dialog = tk.Toplevel(root)
-    dialog.title("Select Directory")
+    dialog.title("Select Season")
     dialog.geometry("500x300")
 
-    label = tk.Label(dialog, text="Select a directory:")
+    label = tk.Label(dialog, text="Select a season:")
     label.pack()
 
     dir_path_var = tk.StringVar()
@@ -102,16 +103,12 @@ def select_tar_file(tar_files):
     return selected_tar_file
 
 selected_tar_file = select_tar_file(tar_files)
-
 local_path = selected_tar_file.split(".")[0]
 
-if not os.path.isfile(selected_tar_file):
+if not os.path.isdir(local_path):
 
     print(f'Downloading {select_tar_file}.')
     subprocess.run(["iget", "-PVT", os.path.join(dir_path, selected_tar_file)]) #, local_path])
-
-
-if not os.path.isdir(local_path):
     
     print(f'Extracting {select_tar_file} at {local_path}.')
     tar = tarfile.open(selected_tar_file, "r:gz")
@@ -262,12 +259,14 @@ def rotate_pcd(pcd ,rotation_theta=90, center_pcd=None):
     rotated_pcd = pcd.rotate(rotation_matrix, center=[center_x, center_y, center_z])
 
     return rotated_pcd
+
 def load_metadata_dict(path):
     
     with open(path) as f:
         meta = json.load(f)['lemnatec_measurement_metadata']
 
     return meta
+
 # Create an empty list to store each pair of point clouds
 pcd_pairs = []
 
@@ -314,13 +313,33 @@ for subdir, dirs, files in os.walk("."):
                     down_west_pcd = copy.deepcopy(west_pcd).voxel_down_sample(voxel_size=1)
                     end = time.time()
                     print(f'Time taken to downsample {item}: {end - start:.2f} seconds')
-            # metadata = load_metadata_dict(json_files[0])
+            
+                meta_path = os.path.join(subdir, '_'.join([item.split('__')[0], 'metadata.json']))
+
+            print(f'Opening metadata file {meta_path}.')
+            metadata = load_metadata_dict(meta_path)
+            
             print('Rotating point clouds.')
             # merged_pcd,merged_down_pcd,new_east,new_east_down = merge_east_west_ransac(east_pcd,west_pcd,down_east_pcd,down_west_pcd)
             # new_east = rotate_pcd(new_east,90,merged_down_pcd)
             # new_west = rotate_pcd(west_pcd,90,merged_down_pcd)
             new_east_down = rotate_pcd(down_east_pcd,90) #,merged_down_pcd)
             new_west_down = rotate_pcd(down_west_pcd,90) #,merged_down_pcd)
+
+            if metadata['gantry_system_variable_metadata']['scanIsInPositiveDirection'] == "False":
+                # merged_down_pcd = merged_down_pcd.translate([0,(float(metadata['gantry_system_variable_metadata']['position x [m]'])-3.798989)/(8.904483-7.964989)*1000,0])
+                # merged_pcd = merged_pcd.translate([0,(float(metadata['gantry_system_variable_metadata']['position x [m]'])-3.798989)/(8.904483-7.964989)*1000,0])
+                # new_east = new_east.translate([0,(float(metadata['gantry_system_variable_metadata']['position x [m]'])-3.798989)/(8.904483-7.964989)*1000,0])
+                # new_west = new_west.translate([0,(float(metadata['gantry_system_variable_metadata']['position x [m]'])-3.798989)/(8.904483-7.964989)*1000,0])
+                new_east_down = new_east_down.translate([0,(float(metadata['gantry_system_variable_metadata']['position x [m]'])-3.798989)/(8.904483-7.964989)*1000,0])
+                new_west_down = new_west_down.translate([0,(float(metadata['gantry_system_variable_metadata']['position x [m]'])-3.798989)/(8.904483-7.964989)*1000,0])
+            else:
+                # merged_down_pcd = merged_down_pcd.translate([22280.82692587,(float(metadata['gantry_system_variable_metadata']['position x [m]'])-3.798989)/(8.904483-7.964989)*1000,0])
+                # merged_pcd = merged_pcd.translate([22280.82692587,(float(metadata['gantry_system_variable_metadata']['position x [m]'])-3.798989)/(8.904483-7.964989)*1000,0])
+                # new_east = new_east.translate([22280.82692587,(float(metadata['gantry_system_variable_metadata']['position x [m]'])-3.798989)/(8.904483-7.964989)*1000,0])
+                # new_west = new_west.translate([22280.82692587,(float(metadata['gantry_system_variable_metadata']['position x [m]'])-3.798989)/(8.904483-7.964989)*1000,0])
+                new_east_down = new_east_down.translate([22280.82692587,(float(metadata['gantry_system_variable_metadata']['position x [m]'])-3.798989)/(8.904483-7.964989)*1000,0])
+                new_west_down = new_west_down.translate([22280.82692587,(float(metadata['gantry_system_variable_metadata']['position x [m]'])-3.798989)/(8.904483-7.964989)*1000,0])
             
             # merged_down_pcd = rotate_pcd(merged_down_pcd,90)
             # merged_pcd = rotate_pcd(merged_pcd,90)
@@ -379,8 +398,7 @@ for pcd1, pcd2 in pcd_pairs:
 # Create an empty list to store the transformations and names
 transformations_and_names = []
 
-# Define a callback function to handle key events
-def handle_key_event(vis, event, key):
+def handle_key_event(vis, key):
     shift_distance = 0.5
 
     if key == ord("A"):
@@ -394,8 +412,8 @@ def handle_key_event(vis, event, key):
 
                 # Store the transformation and names in the transformations_and_names list
                 transformations_and_names.append({
-                    "transformation": transformation,
-                    "names": (pcd1.get_geometry_name(), pcd2.get_geometry_name())
+                    "transformation": transformation
+                    # "names": (pcd1.get_geometry_name(), pcd2.get_geometry_name())
                 })
     elif key == ord("D"):
         # If the user pressed "D", shift every other pair of point clouds to the right
@@ -408,24 +426,26 @@ def handle_key_event(vis, event, key):
 
                 # Store the transformation and names in the transformations_and_names list
                 transformations_and_names.append({
-                    "transformation": transformation,
-                    "names": (pcd1.get_geometry_name(), pcd2.get_geometry_name())
+                    "transformation": transformation
+                    # "names": (pcd1.get_geometry_name(), pcd2.get_geometry_name())
                 })
 
 # Register the key event callback function
-vis.register_key_callback(ord("A"), handle_key_event)
-vis.register_key_callback(ord("D"), handle_key_event)
+# vis.register_key_callback(ord("A"), handle_key_event)
+# vis.register_key_callback(ord("D"), handle_key_event)
+vis.register_key_callback(ord("A"), lambda vis: handle_key_event(vis, ord("A")))
+vis.register_key_callback(ord("D"), lambda vis: handle_key_event(vis, ord("D")))
 
 # Run the visualization
 vis.run()
 vis.destroy_window()
 
-# Save the transformations and names as a CSV file using pandas
-df = pd.DataFrame([{
-    "name1": item["names"][0],
-    "name2": item["names"][1],
-    **{f"t{i}": t for i, t in enumerate(item["transformation"].flatten())}
-} for item in transformations_and_names])
+# # Save the transformations and names as a CSV file using pandas
+# df = pd.DataFrame([{
+#     "name1": item["names"][0],
+#     "name2": item["names"][1],
+#     **{f"t{i}": t for i, t in enumerate(item["transformation"].flatten())}
+# } for item in transformations_and_names])
 
-csv_filename = "ns_transformation.csv"
-df.to_csv(csv_filename, index=False)
+# csv_filename = "ns_transformation.csv"
+# df.to_csv(csv_filename, index=False)

@@ -175,6 +175,39 @@ def pick_points(pcd):
         return centroid
     else:
         return vis.get_picked_points() #points[vis.get_picked_points()[0]]
+    
+def ransac_transform_and_get_inliers(args):
+
+    source_down_points = args[0]
+    target_down_points = args[1]
+    tr_x = args[2]
+    tr_y = args[3]
+    tr_z = args[4]
+    voxel_size = args[5]
+
+    source_down = o3d.geometry.PointCloud() 
+    source_down.points = o3d.utility.Vector3dVector(source_down_points)
+
+    target_down = o3d.geometry.PointCloud() 
+    target_down.points = o3d.utility.Vector3dVector(target_down_points)
+    
+    target_tree = o3d.geometry.KDTreeFlann(target_down)
+
+    translated_source = copy.deepcopy(source_down).translate((tr_x,tr_y, tr_z))
+    translated_points = translated_source.points
+    
+    number_matched_points = 0
+    
+    mins = np.min(translated_points,axis=0)
+    maxs = np.max(translated_points,axis=0)
+
+    for point in translated_points:
+
+        [k, idx, _] = target_tree.search_radius_vector_3d(point, voxel_size)
+        if len(idx)>1:
+            number_matched_points+=1
+
+    return tr_x,tr_y,tr_z,number_matched_points
 
 def execute_manual_location_based_RANSAC(source_down,target_down,num_samples,voxel_size=1,coefs=[2,1,1,1]):
 
@@ -273,6 +306,9 @@ pcd_pairs = []
 # Create an empty list to store the transformation and filenames for each pair of point clouds
 transformations_and_filenames = []
 
+# Initialize an empty list to store the transformations
+transformations = []
+
 for subdir, dirs, files in os.walk("."):
     ply_files = [file for file in files if file.endswith(".ply")]
     json_files = [file for file in files if file.endswith(".json")]
@@ -341,25 +377,22 @@ for subdir, dirs, files in os.walk("."):
                 new_east_down = new_east_down.translate([22280.82692587,(float(metadata['gantry_system_variable_metadata']['position x [m]'])-3.798989)/(8.904483-7.964989)*1000,0])
                 new_west_down = new_west_down.translate([22280.82692587,(float(metadata['gantry_system_variable_metadata']['position x [m]'])-3.798989)/(8.904483-7.964989)*1000,0])
             
-            # merged_down_pcd = rotate_pcd(merged_down_pcd,90)
-            # merged_pcd = rotate_pcd(merged_pcd,90)
-            
-            # select a point in each point cloud
-            picked_points1 = pick_points(new_east_down)
-            picked_points2 = pick_points(new_west_down)
+            # # select a point in each point cloud
+            # picked_points1 = pick_points(new_east_down)
+            # picked_points2 = pick_points(new_west_down)
 
-            if len(picked_points1) == 0 or len(picked_points2) == 0:
-                raise ValueError("No point was selected in one of the point clouds")
+            # if len(picked_points1) == 0 or len(picked_points2) == 0:
+            #     raise ValueError("No point was selected in one of the point clouds")
 
-            point1 = np.asarray(new_east_down.points)[picked_points1[0]]
-            point2 = np.asarray(new_west_down.points)[picked_points2[0]]
+            # point1 = np.asarray(new_east_down.points)[picked_points1[0]]
+            # point2 = np.asarray(new_west_down.points)[picked_points2[0]]
 
-            # calculate the transformation to align these two points
-            transformation = np.eye(4)
-            transformation[:3, 3] = point1 - point2
+            # # calculate the transformation to align these two points
+            # transformation = np.eye(4)
+            # transformation[:3, 3] = point1 - point2
 
-            # transform pcd2 to align with pcd1
-            new_east_down.transform(transformation)
+            # # Append the transformed item to the list of transformations
+            # transformations.append(transformation)
 
         except Exception as e:
             print(f"An error occurred while processing {ply_files[0]} and {ply_files[1]}: {e}")
@@ -367,11 +400,11 @@ for subdir, dirs, files in os.walk("."):
         # store the pair of point clouds for later use
         pcd_pairs.append((new_east_down, new_west_down))
 
-        # store the transformation and filenames for this pair of point clouds
-        transformations_and_filenames.append({
-            "transformation": transformation,
-            "filenames": (ply_files[0], ply_files[1])
-        })
+        # # store the transformation and filenames for this pair of point clouds
+        # transformations_and_filenames.append({
+        #     "transformation": transformation,
+        #     "filenames": (ply_files[0], ply_files[1])
+        # })
 
 # Create a DataFrame from the transformations_and_filenames list
 df = pd.DataFrame([{
@@ -386,22 +419,37 @@ csv_filename = "ew_transformation.csv"
 # Save the DataFrame as a CSV file
 df.to_csv(csv_filename, index=False)
 
+# Calculate the average transformation
+average_transformation = sum(transformations) / len(transformations)
+
 # Set up a visualization window
-vis = VisualizerWithKeyCallback()
+vis = o3d.visualization.VisualizerWithKeyCallback()
 vis.create_window()
+
+# Create an empty list to store the shift distances
+shift_distances = []
 
 # Add all point clouds in pcd_pairs to the visualization
 for pcd1, pcd2 in pcd_pairs:
     vis.add_geometry(pcd1)
     vis.add_geometry(pcd2)
+    bounding_box = pcd1.get_axis_aligned_bounding_box()
+    size = bounding_box.max_bound - bounding_box.min_bound
+    # Set the shift_distance to a fraction of the size of the bounding box
+    shift_distance = size[0] * 0.1
+    shift_distances.append(shift_distance)
+    # pcd1.transform(average_transformation)
+
+# Calculate the average shift distance
+shift_distance = sum(shift_distances) / len(shift_distances)
 
 # Create an empty list to store the transformations and names
 transformations_and_names = []
 
-def handle_key_event(vis, key):
-    shift_distance = 0.5
+def handle_key_event(vis, key, shift_distance):
+    # shift_distance = 0.5
 
-    if key == ord("A"):
+    if key == ord("a"):
         # If the user pressed "A", shift every other pair of point clouds to the left
         for i, (pcd1, pcd2) in enumerate(pcd_pairs):
             if i % 2 == 0:
@@ -413,9 +461,8 @@ def handle_key_event(vis, key):
                 # Store the transformation and names in the transformations_and_names list
                 transformations_and_names.append({
                     "transformation": transformation
-                    # "names": (pcd1.get_geometry_name(), pcd2.get_geometry_name())
                 })
-    elif key == ord("D"):
+    elif key == ord("d"):
         # If the user pressed "D", shift every other pair of point clouds to the right
         for i, (pcd1, pcd2) in enumerate(pcd_pairs):
             if i % 2 == 0:
@@ -427,18 +474,23 @@ def handle_key_event(vis, key):
                 # Store the transformation and names in the transformations_and_names list
                 transformations_and_names.append({
                     "transformation": transformation
-                    # "names": (pcd1.get_geometry_name(), pcd2.get_geometry_name())
                 })
 
 # Register the key event callback function
-# vis.register_key_callback(ord("A"), handle_key_event)
-# vis.register_key_callback(ord("D"), handle_key_event)
-vis.register_key_callback(ord("A"), lambda vis: handle_key_event(vis, ord("A")))
-vis.register_key_callback(ord("D"), lambda vis: handle_key_event(vis, ord("D")))
+vis.register_key_callback(ord("a"), lambda vis: handle_key_event(vis, ord("a"), shift_distance))
+vis.register_key_callback(ord("d"), lambda vis: handle_key_event(vis, ord("d"), shift_distance))
 
 # Run the visualization
 vis.run()
+
+# Keep the window open until the user presses "Q"
+key = None
+while key != ord("Q"):
+    key = vis.poll_events()
+    vis.update_renderer()
+
 vis.destroy_window()
+
 
 # # Save the transformations and names as a CSV file using pandas
 # df = pd.DataFrame([{

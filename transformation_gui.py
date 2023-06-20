@@ -330,7 +330,7 @@ for subdir, dirs, files in os.walk("."):
 
                     # Measure the time it takes to downsample the east point cloud
                     start = time.time()
-                    down_east_pcd = copy.deepcopy(east_pcd).voxel_down_sample(voxel_size=1)
+                    down_east_pcd = copy.deepcopy(east_pcd).voxel_down_sample(voxel_size=10)
                     end = time.time()
                     print(f'Time taken to downsample {item}: {end - start:.2f} seconds')
                 
@@ -346,7 +346,7 @@ for subdir, dirs, files in os.walk("."):
 
                     # Measure the time it takes to downsample the west point cloud
                     start = time.time()
-                    down_west_pcd = copy.deepcopy(west_pcd).voxel_down_sample(voxel_size=1)
+                    down_west_pcd = copy.deepcopy(west_pcd).voxel_down_sample(voxel_size=10)
                     end = time.time()
                     print(f'Time taken to downsample {item}: {end - start:.2f} seconds')
             
@@ -419,85 +419,131 @@ csv_filename = "ew_transformation.csv"
 # Save the DataFrame as a CSV file
 df.to_csv(csv_filename, index=False)
 
-# Calculate the average transformation
-average_transformation = sum(transformations) / len(transformations)
+# # Calculate the average transformation
+# average_transformation = sum(transformations) / len(transformations)
 
-# Set up a visualization window
-vis = o3d.visualization.VisualizerWithKeyCallback()
-vis.create_window()
+def visualize(pcd_pairs):
+    vis = o3d.visualization.VisualizerWithKeyCallback()
+    vis.create_window()
 
-# Create an empty list to store the shift distances
-shift_distances = []
+    # Step 1: Align the point clouds within each pair
+    transformations = []
+    for i, (source, target) in enumerate(pcd_pairs):
+        source.paint_uniform_color([1, 0.706, 0])
+        target.paint_uniform_color([0, 0.651, 0.929])
+        vis.add_geometry(source)
+        vis.add_geometry(target)
+        ctr = vis.get_view_control()
+        print(f"Aligning pair {i+1}")
+        print("Press 'W', 'A', 'S', 'D', 'R', or 'F' to move the source point cloud")
+        print("Press 'Q' to save transformation and move to the next pair")
+        vis.register_key_callback(ord("W"), lambda vis: move_up(vis, source))
+        vis.register_key_callback(ord("A"), lambda vis: move_left(vis, source))
+        vis.register_key_callback(ord("S"), lambda vis: move_down(vis, source))
+        vis.register_key_callback(ord("D"), lambda vis: move_right(vis, source))
+        vis.register_key_callback(ord("R"), lambda vis: move_forward(vis, source))
+        vis.register_key_callback(ord("F"), lambda vis: move_backward(vis, source))
+        vis.register_key_callback(ord("Q"), lambda vis: next_pair(vis))
+        # vis.run()
+        # vis.clear_geometries()
+        trans_init = np.eye(3)
+        while True:
+            trans_prev = trans_init
+            trans_init = source.get_rotation_matrix_from_xyz((0, 0, 0)) @ np.linalg.inv(target.get_rotation_matrix_from_xyz((0, 0, 0)))
+            if np.allclose(trans_init, trans_prev):
+                break
+            source.transform(trans_init)
+            update_visualization(vis)
+        transformations.append(trans_init)
+        vis.run()
+        vis.clear_geometries()
+    avg_transformation_1 = np.mean(transformations, axis=0)
 
-# Add all point clouds in pcd_pairs to the visualization
-for pcd1, pcd2 in pcd_pairs:
-    vis.add_geometry(pcd1)
-    vis.add_geometry(pcd2)
-    bounding_box = pcd1.get_axis_aligned_bounding_box()
-    size = bounding_box.max_bound - bounding_box.min_bound
-    # Set the shift_distance to a fraction of the size of the bounding box
-    shift_distance = size[0] * 0.1
-    shift_distances.append(shift_distance)
-    # pcd1.transform(average_transformation)
+    # Step 2: Align every other pair of point clouds
+    transformations = []
+    for i in range(0, len(pcd_pairs)-1, 2):
+        source = pcd_pairs[i][1]
+        target = pcd_pairs[i+1][0]
+        source.paint_uniform_color([1, 0.706, 0])
+        target.paint_uniform_color([0, 0.651, 0.929])
+        vis.add_geometry(source)
+        vis.add_geometry(target)
+        ctr = vis.get_view_control()
+        print(f"Aligning pair {i+1} with pair {i+2}")
+        print("Press 'W', 'A', 'S', 'D', 'R', or 'F' to move the source point cloud")
+        print("Press 'Q' to save transformation and move to the next pair")
+        vis.register_key_callback(ord("W"), lambda vis: move_up(vis, source))
+        vis.register_key_callback(ord("A"), lambda vis: move_left(vis, source))
+        vis.register_key_callback(ord("S"), lambda vis: move_down(vis, source))
+        vis.register_key_callback(ord("D"), lambda vis: move_right(vis, source))
+        vis.register_key_callback(ord("R"), lambda vis: move_forward(vis, source))
+        vis.register_key_callback(ord("F"), lambda vis: move_backward(vis, source))
+        vis.register_key_callback(ord("Q"), lambda vis: next_pair(vis))
+        # vis.run()
+        # vis.clear_geometries()
+        trans_init = np.eye(3)
+        while True:
+            trans_prev = trans_init
+            trans_init = source.get_rotation_matrix_from_xyz((0, 0, 0)) @ np.linalg.inv(target.get_rotation_matrix_from_xyz((0, 0, 0)))
+            if np.allclose(trans_init, trans_prev):
+                break
+            source.transform(trans_init)
+            update_visualization(vis)
+        transformations.append(trans_init)
+        vis.run()
+        vis.clear_geometries()
+    avg_transformation_2 = np.mean(transformations, axis=0)
+    vis.destroy_window()
 
-# Calculate the average shift distance
-shift_distance = sum(shift_distances) / len(shift_distances)
+    # Save the average transformations to a file
+    with open("transformation.txt", "w") as f:
+        f.write("Average transformation for step 1:\n")
+        np.savetxt(f, avg_transformation_1)
+        f.write("\nAverage transformation for step 2:\n")
+        np.savetxt(f, avg_transformation_2)
 
-# Create an empty list to store the transformations and names
-transformations_and_names = []
-
-def handle_key_event(vis, key, shift_distance):
-    # shift_distance = 0.5
-
-    if key == ord("a"):
-        # If the user pressed "A", shift every other pair of point clouds to the left
-        for i, (pcd1, pcd2) in enumerate(pcd_pairs):
-            if i % 2 == 0:
-                transformation = np.eye(4)
-                transformation[0, 3] -= shift_distance
-                pcd1.transform(transformation)
-                pcd2.transform(transformation)
-
-                # Store the transformation and names in the transformations_and_names list
-                transformations_and_names.append({
-                    "transformation": transformation
-                })
-    elif key == ord("d"):
-        # If the user pressed "D", shift every other pair of point clouds to the right
-        for i, (pcd1, pcd2) in enumerate(pcd_pairs):
-            if i % 2 == 0:
-                transformation = np.eye(4)
-                transformation[0, 3] += shift_distance
-                pcd1.transform(transformation)
-                pcd2.transform(transformation)
-
-                # Store the transformation and names in the transformations_and_names list
-                transformations_and_names.append({
-                    "transformation": transformation
-                })
-
-# Register the key event callback function
-vis.register_key_callback(ord("a"), lambda vis: handle_key_event(vis, ord("a"), shift_distance))
-vis.register_key_callback(ord("d"), lambda vis: handle_key_event(vis, ord("d"), shift_distance))
-
-# Run the visualization
-vis.run()
-
-# Keep the window open until the user presses "Q"
-key = None
-while key != ord("Q"):
-    key = vis.poll_events()
+def update_visualization(vis, source):
+    vis.update_geometry(source)
+    vis.poll_events()
     vis.update_renderer()
 
-vis.destroy_window()
+def move_left(vis, source, size=1): #.0.05 
+    trans = np.eye(4)
+    trans[0,3] -= size
+    source.transform(trans)
+    update_visualization(vis, source)
 
+def move_right(vis, source, size=1):
+    trans = np.eye(4)
+    trans[0,3] += size
+    source.transform(trans)
+    update_visualization(vis, source)
 
-# # Save the transformations and names as a CSV file using pandas
-# df = pd.DataFrame([{
-#     "name1": item["names"][0],
-#     "name2": item["names"][1],
-#     **{f"t{i}": t for i, t in enumerate(item["transformation"].flatten())}
-# } for item in transformations_and_names])
+def move_up(vis, source, size=1):
+    trans = np.eye(4)
+    trans[1,3] += size
+    source.transform(trans)
+    update_visualization(vis, source)
 
-# csv_filename = "ns_transformation.csv"
-# df.to_csv(csv_filename, index=False)
+def move_down(vis, source, size=1):
+    trans = np.eye(4)
+    trans[1,3] -= size
+    source.transform(trans)
+    update_visualization(vis, source)
+
+def move_forward(vis, source, size=1):
+    trans = np.eye(4)
+    trans[2,3] -= size
+    source.transform(trans)
+    update_visualization(vis, source)
+
+def move_backward(vis, source, size=1):
+    trans = np.eye(4)
+    trans[2,3] += size
+    source.transform(trans)
+    update_visualization(vis, source)
+
+def next_pair(vis):
+    vis.register_animation_callback(None)
+
+visualize(pcd_pairs)

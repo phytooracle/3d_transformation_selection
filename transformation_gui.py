@@ -303,12 +303,6 @@ def load_metadata_dict(path):
 # Create an empty list to store each pair of point clouds
 pcd_pairs = []
 
-# Create an empty list to store the transformation and filenames for each pair of point clouds
-transformations_and_filenames = []
-
-# Initialize an empty list to store the transformations
-transformations = []
-
 for subdir, dirs, files in os.walk("."):
     ply_files = [file for file in files if file.endswith(".ply")]
     json_files = [file for file in files if file.endswith(".json")]
@@ -356,9 +350,6 @@ for subdir, dirs, files in os.walk("."):
             metadata = load_metadata_dict(meta_path)
             
             print('Rotating point clouds.')
-            # merged_pcd,merged_down_pcd,new_east,new_east_down = merge_east_west_ransac(east_pcd,west_pcd,down_east_pcd,down_west_pcd)
-            # new_east = rotate_pcd(new_east,90,merged_down_pcd)
-            # new_west = rotate_pcd(west_pcd,90,merged_down_pcd)
             new_east_down = rotate_pcd(down_east_pcd,90) #,merged_down_pcd)
             new_west_down = rotate_pcd(down_west_pcd,90) #,merged_down_pcd)
 
@@ -376,23 +367,6 @@ for subdir, dirs, files in os.walk("."):
                 # new_west = new_west.translate([22280.82692587,(float(metadata['gantry_system_variable_metadata']['position x [m]'])-3.798989)/(8.904483-7.964989)*1000,0])
                 new_east_down = new_east_down.translate([22280.82692587,(float(metadata['gantry_system_variable_metadata']['position x [m]'])-3.798989)/(8.904483-7.964989)*1000,0])
                 new_west_down = new_west_down.translate([22280.82692587,(float(metadata['gantry_system_variable_metadata']['position x [m]'])-3.798989)/(8.904483-7.964989)*1000,0])
-            
-            # # select a point in each point cloud
-            # picked_points1 = pick_points(new_east_down)
-            # picked_points2 = pick_points(new_west_down)
-
-            # if len(picked_points1) == 0 or len(picked_points2) == 0:
-            #     raise ValueError("No point was selected in one of the point clouds")
-
-            # point1 = np.asarray(new_east_down.points)[picked_points1[0]]
-            # point2 = np.asarray(new_west_down.points)[picked_points2[0]]
-
-            # # calculate the transformation to align these two points
-            # transformation = np.eye(4)
-            # transformation[:3, 3] = point1 - point2
-
-            # # Append the transformed item to the list of transformations
-            # transformations.append(transformation)
 
         except Exception as e:
             print(f"An error occurred while processing {ply_files[0]} and {ply_files[1]}: {e}")
@@ -400,35 +374,14 @@ for subdir, dirs, files in os.walk("."):
         # store the pair of point clouds for later use
         pcd_pairs.append((new_east_down, new_west_down))
 
-        # # store the transformation and filenames for this pair of point clouds
-        # transformations_and_filenames.append({
-        #     "transformation": transformation,
-        #     "filenames": (ply_files[0], ply_files[1])
-        # })
-
-# Create a DataFrame from the transformations_and_filenames list
-df = pd.DataFrame([{
-    "filename1": item["filenames"][0],
-    "filename2": item["filenames"][1],
-    **{f"t{i}": t for i, t in enumerate(item["transformation"].flatten())}
-} for item in transformations_and_filenames])
-
-# Specify the filename of the CSV file
-csv_filename = "ew_transformation.csv"
-
-# Save the DataFrame as a CSV file
-df.to_csv(csv_filename, index=False)
-
-# # Calculate the average transformation
-# average_transformation = sum(transformations) / len(transformations)
-
 def visualize(pcd_pairs):
     vis = o3d.visualization.VisualizerWithKeyCallback()
     vis.create_window()
-
     # Step 1: Align the point clouds within each pair
     transformations = []
     for i, (source, target) in enumerate(pcd_pairs):
+
+        print('Preparing pair.')
         source.paint_uniform_color([1, 0.706, 0])
         target.paint_uniform_color([0, 0.651, 0.929])
         vis.add_geometry(source)
@@ -443,9 +396,8 @@ def visualize(pcd_pairs):
         vis.register_key_callback(ord("D"), lambda vis: move_right(vis, source))
         vis.register_key_callback(ord("R"), lambda vis: move_forward(vis, source))
         vis.register_key_callback(ord("F"), lambda vis: move_backward(vis, source))
-        vis.register_key_callback(ord("Q"), lambda vis: next_pair(vis))
-        # vis.run()
-        # vis.clear_geometries()
+        # vis.register_key_callback(ord("Q"), lambda vis: next_pair(vis))
+        vis.run()
         trans_init = np.eye(3)
         while True:
             trans_prev = trans_init
@@ -455,13 +407,15 @@ def visualize(pcd_pairs):
             source.transform(trans_init)
             update_visualization(vis)
         transformations.append(trans_init)
-        vis.run()
         vis.clear_geometries()
-    avg_transformation_1 = np.mean(transformations, axis=0)
+
+    # Save the transformations from Step 1 to a file
+    np.savetxt('ew_transformations.txt', transformations)
 
     # Step 2: Align every other pair of point clouds
     transformations = []
     for i in range(0, len(pcd_pairs)-1, 2):
+ 
         source = pcd_pairs[i][1]
         target = pcd_pairs[i+1][0]
         source.paint_uniform_color([1, 0.706, 0])
@@ -478,9 +432,8 @@ def visualize(pcd_pairs):
         vis.register_key_callback(ord("D"), lambda vis: move_right(vis, source))
         vis.register_key_callback(ord("R"), lambda vis: move_forward(vis, source))
         vis.register_key_callback(ord("F"), lambda vis: move_backward(vis, source))
-        vis.register_key_callback(ord("Q"), lambda vis: next_pair(vis))
-        # vis.run()
-        # vis.clear_geometries()
+        # vis.register_key_callback(ord("Q"), lambda vis: next_pair(vis))
+        vis.run()
         trans_init = np.eye(3)
         while True:
             trans_prev = trans_init
@@ -490,17 +443,10 @@ def visualize(pcd_pairs):
             source.transform(trans_init)
             update_visualization(vis)
         transformations.append(trans_init)
-        vis.run()
         vis.clear_geometries()
-    avg_transformation_2 = np.mean(transformations, axis=0)
-    vis.destroy_window()
 
-    # Save the average transformations to a file
-    with open("transformation.txt", "w") as f:
-        f.write("Average transformation for step 1:\n")
-        np.savetxt(f, avg_transformation_1)
-        f.write("\nAverage transformation for step 2:\n")
-        np.savetxt(f, avg_transformation_2)
+    # Save the transformations from Step 1 to a file
+    np.savetxt('ns_transformations.txt', transformations)
 
 def update_visualization(vis, source):
     vis.update_geometry(source)
@@ -544,6 +490,10 @@ def move_backward(vis, source, size=1):
     update_visualization(vis, source)
 
 def next_pair(vis):
+    # Stop the visualization
     vis.register_animation_callback(None)
+    vis.poll_events()
+    vis.update_renderer()
+    vis.destroy_window()
 
 visualize(pcd_pairs)

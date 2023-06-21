@@ -395,12 +395,11 @@ def save_transform_and_move_to_next_pair(vis,cumulative_transform,list_of_transf
     print('Saving cumulative transformation')
     list_of_transforms.append(cumulative_transform)
     print('Saved cumulative transformation')
+    vis.clear_geometries()
     vis.register_animation_callback(None)
     vis.poll_events()
     vis.update_renderer()
-    print('Calling vis.destroy_window()')
     vis.destroy_window()
-    print('vis.destroy_window() called')
 
 # Initialize the Open3D GUI application
 Application.instance.initialize()

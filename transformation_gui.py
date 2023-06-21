@@ -4,6 +4,7 @@ Author : Emmanuel Gonzalez
 Date   : 2023-06-14
 Purpose: 3D Point Cloud Transformation Selector Graphical User Interface
 """
+import open3d as o3d
 import subprocess
 import tkinter as tk
 from tkinter import simpledialog
@@ -11,8 +12,7 @@ from tkinter import ttk
 from tkinter import filedialog
 import tarfile
 import os
-import open3d as o3d
-from open3d.visualization import VisualizerWithKeyCallback
+# from open3d.visualization import VisualizerWithKeyCallback
 import numpy as np
 import copy
 import time

@@ -21,6 +21,7 @@ import time
 import pandas as pd
 import multiprocessing
 import json
+from open3d.visualization.gui import Application
 
 
 root = tk.Tk()
@@ -417,26 +418,23 @@ for subdir, dirs, files in os.walk("."):
             new_west_down = rotate_pcd(down_west_pcd,90) #,merged_down_pcd)
 
             if metadata['gantry_system_variable_metadata']['scanIsInPositiveDirection'] == "False":
-                # merged_down_pcd = merged_down_pcd.translate([0,(float(metadata['gantry_system_variable_metadata']['position x [m]'])-3.798989)/(8.904483-7.964989)*1000,0])
-                # merged_pcd = merged_pcd.translate([0,(float(metadata['gantry_system_variable_metadata']['position x [m]'])-3.798989)/(8.904483-7.964989)*1000,0])
-                # new_east = new_east.translate([0,(float(metadata['gantry_system_variable_metadata']['position x [m]'])-3.798989)/(8.904483-7.964989)*1000,0])
-                # new_west = new_west.translate([0,(float(metadata['gantry_system_variable_metadata']['position x [m]'])-3.798989)/(8.904483-7.964989)*1000,0])
+
                 new_east_down = new_east_down.translate([0,(float(metadata['gantry_system_variable_metadata']['position x [m]'])-3.798989)/(8.904483-7.964989)*1000,0])
                 new_west_down = new_west_down.translate([0,(float(metadata['gantry_system_variable_metadata']['position x [m]'])-3.798989)/(8.904483-7.964989)*1000,0])
             else:
-                # merged_down_pcd = merged_down_pcd.translate([22280.82692587,(float(metadata['gantry_system_variable_metadata']['position x [m]'])-3.798989)/(8.904483-7.964989)*1000,0])
-                # merged_pcd = merged_pcd.translate([22280.82692587,(float(metadata['gantry_system_variable_metadata']['position x [m]'])-3.798989)/(8.904483-7.964989)*1000,0])
-                # new_east = new_east.translate([22280.82692587,(float(metadata['gantry_system_variable_metadata']['position x [m]'])-3.798989)/(8.904483-7.964989)*1000,0])
-                # new_west = new_west.translate([22280.82692587,(float(metadata['gantry_system_variable_metadata']['position x [m]'])-3.798989)/(8.904483-7.964989)*1000,0])
+
                 new_east_down = new_east_down.translate([22280.82692587,(float(metadata['gantry_system_variable_metadata']['position x [m]'])-3.798989)/(8.904483-7.964989)*1000,0])
                 new_west_down = new_west_down.translate([22280.82692587,(float(metadata['gantry_system_variable_metadata']['position x [m]'])-3.798989)/(8.904483-7.964989)*1000,0])
+            # store the pair of point clouds for later use
+
+            print("Appending point cloud pair to list")
+            pcd_pairs.append((new_east_down, new_west_down))
+            print("Appended point cloud pair to list")
+
+            del metadata, east_pcd, down_east_pcd, new_east_down, west_pcd, down_west_pcd, new_west_down
 
         except Exception as e:
             print(f"An error occurred while processing {ply_files[0]} and {ply_files[1]}: {e}")
-
-        # store the pair of point clouds for later use
-        pcd_pairs.append((new_east_down, new_west_down))
-        del metadata, east_pcd, down_east_pcd, new_east_down, west_pcd, down_west_pcd, new_west_down
 
 def save_transformation(vis, source, target, transformations):
     trans_init = source.get_rotation_matrix_from_xyz((0, 0, 0)) @ np.linalg.inv(target.get_rotation_matrix_from_xyz((0, 0, 0)))
@@ -460,44 +458,99 @@ def update_visualization(vis, source):
     vis.poll_events()
     vis.update_renderer()
 
-def set_up_vis(source_copy, target, target_max_coords):
+def set_up_vis(source_copy, target):
 
     vis = o3d.visualization.VisualizerWithKeyCallback()
     vis.create_window()
     vis.add_geometry(source_copy)
     vis.add_geometry(target)
 
-    # # Center the visualization on the tallest point in the target point cloud
-    # ctr = vis.get_view_control()
-    # ctr.set_front(target_max_coords)
-    # ctr.set_lookat(target_max_coords)
-
     return vis
+
+def move_left(vis, source, size=1):
+    global cum_trans
+    trans = np.eye(4)
+    trans[0,3] -= size
+    cum_trans = np.dot(trans,cum_trans)
+    source.transform(trans)
+    update_visualization(vis, source)
+
+def move_right(vis, source, size=1):
+    global cum_trans
+    trans = np.eye(4)
+    trans[0,3] += size
+    cum_trans = np.dot(trans,cum_trans)
+    source.transform(trans)
+    update_visualization(vis, source)
+
+def move_up(vis, source, size=1):
+    global cum_trans
+    trans = np.eye(4)
+    trans[1,3] += size
+    cum_trans = np.dot(trans,cum_trans)
+    source.transform(trans)
+    update_visualization(vis, source)
+
+def move_down(vis, source, size=1):
+    global cum_trans
+    trans = np.eye(4)
+    trans[1,3] -= size
+    cum_trans = np.dot(trans,cum_trans)
+    source.transform(trans)
+    update_visualization(vis, source)
+
+def move_forward(vis, source, size=1):
+    global cum_trans
+    trans = np.eye(4)
+    trans[2,3] -= size
+    cum_trans = np.dot(trans,cum_trans)
+    source.transform(trans)
+    update_visualization(vis, source)
+
+def move_backward(vis, source, size=1):
+    global cum_trans
+    trans = np.eye(4)
+    trans[2,3] += size
+    cum_trans = np.dot(trans,cum_trans)
+    source.transform(trans)
+    update_visualization(vis, source)
+
+def ignore_pair(vis):
+    pass
+
+def next_pair(vis):
+    # Stop the visualization
+    vis.register_animation_callback(None)
+    vis.poll_events()
+    vis.update_renderer()
+    vis.destroy_window()
+
+def save_transform_and_move_to_next_pair(vis,cumulative_transform,list_of_transforms):
+
+    print('Saving cumulative transformation')
+    list_of_transforms.append(cumulative_transform)
+    print('Saved cumulative transformation')
+    vis.register_animation_callback(None)
+    vis.poll_events()
+    vis.update_renderer()
+    print('Calling vis.destroy_window()')
+    vis.destroy_window()
+    print('vis.destroy_window() called')
 
 def run_destroy_vis(vis):
 
     vis.run()
     vis.destroy_window()
 
+# Initialize the Open3D GUI application
+Application.instance.initialize()
+print(f'Length of pcd_pairs: {len(pcd_pairs)}')
 # Step 1: Align the point clouds within each pair
 final_transformations = []
 for i, (source, target) in enumerate(pcd_pairs):
-
-    # Declare next_pair as a global variable
-    global next_pair
-    next_pair = False
     
     # Create a copy of source
     source_copy = copy.deepcopy(source)
-    
-    # Convert the points in the target point cloud to a NumPy array
-    target_points = np.asarray(target.points)
-    
-    # Find the index of the point with the maximum Z coordinate
-    max_z_index = np.argmax(target_points[:, 2])
-    
-    # Get the coordinates of the point with the maximum Z coordinate
-    target_max_coords = target_points[max_z_index]
     
     # Paint the point clouds for visualization
     print('Preparing point cloud pair')
@@ -509,67 +562,9 @@ for i, (source, target) in enumerate(pcd_pairs):
     print("Press 'W', 'A', 'S', 'D', 'R', or 'F' to move the source point cloud")
     print("Press 'Q' to save transformation and move to the next pair")
     print("Press 'I' to ignore this pair and move to the next pair")
-    vis = set_up_vis(source_copy, target, target_max_coords)
+    vis = set_up_vis(source_copy, target)
     
     cum_trans = np.eye(4)
-
-    def move_left(vis, source, size=1): #.0.05 
-        global cum_trans
-        trans = np.eye(4)
-        trans[0,3] -= size
-        cum_trans = np.dot(trans,cum_trans)
-        source.transform(trans)
-        update_visualization(vis, source)
-
-    def move_right(vis, source, size=1):
-        global cum_trans
-        trans = np.eye(4)
-        trans[0,3] += size
-        cum_trans = np.dot(trans,cum_trans)
-        source.transform(trans)
-        update_visualization(vis, source)
-
-    def move_up(vis, source, size=1):
-        global cum_trans
-        trans = np.eye(4)
-        trans[1,3] += size
-        cum_trans = np.dot(trans,cum_trans)
-        source.transform(trans)
-        update_visualization(vis, source)
-
-    def move_down(vis, source, size=1):
-        global cum_trans
-        trans = np.eye(4)
-        trans[1,3] -= size
-        cum_trans = np.dot(trans,cum_trans)
-        source.transform(trans)
-        update_visualization(vis, source)
-
-    def move_forward(vis, source, size=1):
-        global cum_trans
-        trans = np.eye(4)
-        trans[2,3] -= size
-        cum_trans = np.dot(trans,cum_trans)
-        source.transform(trans)
-        update_visualization(vis, source)
-
-    def move_backward(vis, source, size=1):
-        global cum_trans
-        trans = np.eye(4)
-        trans[2,3] += size
-        cum_trans = np.dot(trans,cum_trans)
-        source.transform(trans)
-        update_visualization(vis, source)
-
-    def ignore_pair(vis):
-        pass
-        
-    def save_transform_and_move_to_next_pair(vis,cumulative_transform,list_of_transforms):
-        # Declare next_pair as a global variable
-        global next_pair
-        print('Saving cumulative transformation')
-        list_of_transforms.append(cumulative_transform)
-        next_pair = True
 
     # Register key callbacks to move point cloud along the x-axis
     vis.register_key_callback(ord("W"), lambda vis: move_up(vis, source_copy))
@@ -581,19 +576,16 @@ for i, (source, target) in enumerate(pcd_pairs):
     vis.register_key_callback(ord("I"), lambda vis: ignore_pair(vis))
     vis.register_key_callback(ord("Q"), lambda vis: save_transform_and_move_to_next_pair(vis,cum_trans,final_transformations))
 
-    # Run the visualization
-    print('Entering while loop')
-    while True:
-        vis.run()
-        if next_pair:
-            print('Calling vis.destroy_window()')
-            vis.destroy_window()
-            print('vis.destroy_window() called')
-            break
+    # Run and destroy the visualization
+    run_destroy_vis(vis)
+    
+    # Delete or reassign variables that are no longer needed
+    del source_copy
 
 # Calculate the final transformation based on all transformations
 final_transformation = np.mean(final_transformations,axis=0)
 print(f'Final EW transformation: {final_transformation}')
+
 # Save the final transformation to a file
 np.save('ew_transformation.npy', final_transformation)
 
@@ -627,7 +619,7 @@ np.save('ew_transformation.npy', final_transformation)
 #     print("Press 'W', 'A', 'S', 'D', 'R', or 'F' to move the source point cloud")
 #     print("Press 'Q' to save transformation and move to the next pair")
 #     print("Press 'I' to ignore this pair and move to the next pair")
-#     vis = set_up_vis(source_copy, target, target_max_coords)
+#     vis = set_up_vis(source_copy, target)
     
 #     cum_trans = np.eye(4)
     

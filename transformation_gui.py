@@ -14,7 +14,6 @@ import os
 import open3d as o3d
 from open3d.visualization import VisualizerWithKeyCallback
 import numpy as np
-import csv
 import copy
 import time
 import pandas as pd

@@ -175,23 +175,6 @@ def pick_points(pcd):
         return centroid
     else:
         return vis.get_picked_points() #points[vis.get_picked_points()[0]]
-    
-    
-def open_ply(filepath):
-    # Read the PLY file into a numpy array
-    plydata = PlyData.read(filepath)
-    vertex = plydata['vertex']
-    x = vertex['x']
-    y = vertex['y']
-    z = vertex['z']
-    xyz = np.column_stack((x, y, z))
-
-    # Pass the numpy array to Open3D
-    pcd = o3d.geometry.PointCloud()
-    pcd.points = o3d.utility.Vector3dVector(xyz)
-
-    # Return the Open3D point cloud object
-    return pcd
 
 def pick_points(pcd):
     # Convert the point cloud to a numpy array
@@ -386,7 +369,7 @@ for subdir, dirs, files in os.walk("."):
 
                     # Measure the time it takes to downsample the east point cloud
                     start = time.time()
-                    down_east_pcd = copy.deepcopy(east_pcd).voxel_down_sample(voxel_size=10)
+                    down_east_pcd = copy.deepcopy(east_pcd).voxel_down_sample(voxel_size=20)
                     end = time.time()
                     print(f'Time taken to downsample {item}: {end - start:.2f} seconds')
                 
@@ -402,7 +385,7 @@ for subdir, dirs, files in os.walk("."):
 
                     # Measure the time it takes to downsample the west point cloud
                     start = time.time()
-                    down_west_pcd = copy.deepcopy(west_pcd).voxel_down_sample(voxel_size=10)
+                    down_west_pcd = copy.deepcopy(west_pcd).voxel_down_sample(voxel_size=20)
                     end = time.time()
                     print(f'Time taken to downsample {item}: {end - start:.2f} seconds')
             

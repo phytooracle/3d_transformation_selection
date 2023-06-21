@@ -38,7 +38,6 @@ RUN apt-get install -y wget \
                        libgl1-mesa-glx \
                        libnvidia-gl-440
                        
-
 RUN add-apt-repository ppa:ubuntugis/ubuntugis-unstable
 RUN apt-get update
 RUN apt-get install -y python3-pyproj
@@ -114,4 +113,4 @@ RUN echo "{ \"irods_zone_name\": \"iplant\", \"irods_host\": \"data.cyverse.org\
 RUN apt-get autoremove -y
 RUN apt-get clean
 
-ENTRYPOINT [ "/usr/local/bin/python3.7", "/opt/transformation_gui.py" ]
+ENTRYPOINT [ "/usr/local/bin/python3.10", "/opt/transformation_gui.py" ]

@@ -449,39 +449,28 @@ def save_transformation(vis, source, target, transformations):
     del source
     del target
 
-def ignore_pair(vis):
-
-    vis.clear_geometries()
-    vis.register_animation_callback(None)
-    vis.poll_events()
-    vis.update_renderer()
-    vis.destroy_window()
-
 def update_view(vis, highest_point):
 
     ctr = vis.get_view_control()
     ctr.set_lookat(highest_point)
     return False
 
-def update_visualization(vis, source, source_copy):
-
-    vis.update_geometry(source_copy)
+def update_visualization(vis, source):
+    vis.update_geometry(source)
     vis.poll_events()
     vis.update_renderer()
 
-def next_pair(vis):
-
-    vis.register_animation_callback(None)
-    vis.poll_events()
-    vis.update_renderer()
-    vis.destroy_window()
-
-def set_up_vis(source_copy, target):
+def set_up_vis(source_copy, target, target_max_coords):
 
     vis = o3d.visualization.VisualizerWithKeyCallback()
     vis.create_window()
     vis.add_geometry(source_copy)
     vis.add_geometry(target)
+
+    # # Center the visualization on the tallest point in the target point cloud
+    # ctr = vis.get_view_control()
+    # ctr.set_front(target_max_coords)
+    # ctr.set_lookat(target_max_coords)
 
     return vis
 
@@ -490,164 +479,237 @@ def run_destroy_vis(vis):
     vis.run()
     vis.destroy_window()
 
-# Phase 1: Align the point clouds within each pair
-transformations = []
+# Step 1: Align the point clouds within each pair
+final_transformations = []
 for i, (source, target) in enumerate(pcd_pairs):
-    
-    # Create visualization window
-    # vis = o3d.visualization.VisualizerWithKeyCallback()
-    # vis.create_window()
 
+    # Declare next_pair as a global variable
+    global next_pair
+    next_pair = False
+    
     # Create a copy of source
     source_copy = copy.deepcopy(source)
     
-    # Initialize transformation matrix
-    trans_mat = np.identity(4)
-
+    # Convert the points in the target point cloud to a NumPy array
+    target_points = np.asarray(target.points)
+    
+    # Find the index of the point with the maximum Z coordinate
+    max_z_index = np.argmax(target_points[:, 2])
+    
+    # Get the coordinates of the point with the maximum Z coordinate
+    target_max_coords = target_points[max_z_index]
+    
     # Paint the point clouds for visualization
-    print('Preparing pair.')
+    print('Preparing point cloud pair')
     source.paint_uniform_color([1, 0.706, 0])
     source_copy.paint_uniform_color([1, 0.706, 0])
-    target.paint_uniform_color([0, 0.651, 0.929])
+    target.paint_uniform_color([0, 0.651, 0.929])  
 
-############################################################################################################    
-    # Step 1: Align the x-axis
-    print("Step 1: Align the x-axis")
-    print("Press 'A' or 'D' to move the source point cloud along the x-axis. Press 'I' to ignore the pair.")
-    vis = set_up_vis(source_copy, target)
-    x_translation = 0
+    # Set up the visualization
+    print("Press 'W', 'A', 'S', 'D', 'R', or 'F' to move the source point cloud")
+    print("Press 'Q' to save transformation and move to the next pair")
+    print("Press 'I' to ignore this pair and move to the next pair")
+    vis = set_up_vis(source_copy, target, target_max_coords)
     
-    final_transformation = np.identity(4)
+    cum_trans = np.eye(4)
 
-    def move_left(vis):
-        # global source
-        # global source_copy
-        # global x_translation
-        # global trans_mat
-        # global final_transformation
-        # trans_mat = np.identity(4)
-        # x_translation -= 1
-        # trans_mat[0, 3] = x_translation
-        # source_copy.transform(trans_mat)
+    def move_left(vis, source, size=1): #.0.05 
+        global cum_trans
         trans = np.eye(4)
-        trans[0,3] -= 1
-        source_copy.transform(trans)
-        update_visualization(vis, source, source_copy)
-        final_transformation = trans
-        # final_transformation = trans_mat
-        print(x_translation)
+        trans[0,3] -= size
+        cum_trans = np.dot(trans,cum_trans)
+        source.transform(trans)
+        update_visualization(vis, source)
 
-    def move_right(vis):
-        # global source
-        # global source_copy
-        # global x_translation
-        # global trans_mat
-        # global final_transformation
-        # trans_mat = np.identity(4)
-        # x_translation += 1
-        # trans_mat[0, 3] = x_translation
-        # source_copy.transform(trans_mat)
+    def move_right(vis, source, size=1):
+        global cum_trans
         trans = np.eye(4)
-        trans[0,3] += 1
-        source_copy.transform(trans)
-        update_visualization(vis, source, source_copy)
-        final_transformation = trans
-        # final_transformation = trans_mat
-        print(x_translation)
+        trans[0,3] += size
+        cum_trans = np.dot(trans,cum_trans)
+        source.transform(trans)
+        update_visualization(vis, source)
+
+    def move_up(vis, source, size=1):
+        global cum_trans
+        trans = np.eye(4)
+        trans[1,3] += size
+        cum_trans = np.dot(trans,cum_trans)
+        source.transform(trans)
+        update_visualization(vis, source)
+
+    def move_down(vis, source, size=1):
+        global cum_trans
+        trans = np.eye(4)
+        trans[1,3] -= size
+        cum_trans = np.dot(trans,cum_trans)
+        source.transform(trans)
+        update_visualization(vis, source)
+
+    def move_forward(vis, source, size=1):
+        global cum_trans
+        trans = np.eye(4)
+        trans[2,3] -= size
+        cum_trans = np.dot(trans,cum_trans)
+        source.transform(trans)
+        update_visualization(vis, source)
+
+    def move_backward(vis, source, size=1):
+        global cum_trans
+        trans = np.eye(4)
+        trans[2,3] += size
+        cum_trans = np.dot(trans,cum_trans)
+        source.transform(trans)
+        update_visualization(vis, source)
 
     def ignore_pair(vis):
+        pass
         
-        vis.clear_geometries()
-        vis.register_animation_callback(None)
-        vis.poll_events()
-        vis.update_renderer()
-        vis.destroy_window()
+    def save_transform_and_move_to_next_pair(vis,cumulative_transform,list_of_transforms):
+        # Declare next_pair as a global variable
+        global next_pair
+        print('Saving cumulative transformation')
+        list_of_transforms.append(cumulative_transform)
+        next_pair = True
 
     # Register key callbacks to move point cloud along the x-axis
-    vis.register_key_callback(ord("A"), lambda vis: move_left(vis))
-    vis.register_key_callback(ord("D"), lambda vis: move_right(vis))
-    # vis.register_key_callback(ord("I"), ignore_pair)
+    vis.register_key_callback(ord("W"), lambda vis: move_up(vis, source_copy))
+    vis.register_key_callback(ord("A"), lambda vis: move_left(vis, source_copy))
+    vis.register_key_callback(ord("S"), lambda vis: move_down(vis, source_copy))
+    vis.register_key_callback(ord("D"), lambda vis: move_right(vis, source_copy))
+    vis.register_key_callback(ord("R"), lambda vis: move_forward(vis, source_copy))
+    vis.register_key_callback(ord("F"), lambda vis: move_backward(vis, source_copy))
+    vis.register_key_callback(ord("I"), lambda vis: ignore_pair(vis))
+    vis.register_key_callback(ord("Q"), lambda vis: save_transform_and_move_to_next_pair(vis,cum_trans,final_transformations))
+
+    # Run the visualization
+    print('Entering while loop')
+    while True:
+        vis.run()
+        if next_pair:
+            print('Calling vis.destroy_window()')
+            vis.destroy_window()
+            print('vis.destroy_window() called')
+            break
+
+# Calculate the final transformation based on all transformations
+final_transformation = np.mean(final_transformations,axis=0)
+print(f'Final EW transformation: {final_transformation}')
+# Save the final transformation to a file
+np.save('ew_transformation.npy', final_transformation)
+
+# # Step 2: Align all point clouds
+# final_transformations = []
+# for i in range(0, len(pcd_pairs), 2):
+
+#     # Get the source and target point clouds
+#     source = pcd_pairs[i][0]
+#     target = pcd_pairs[i+1][0]
     
-    # Wait for user input before moving to the next step
-    # input("Press Enter to move to the next step...")
-    # vis.run()
-    # vis.destroy_window()
-    run_destroy_vis(vis)
-    print(final_transformation)
-
-
-# #################################################################################################### 
-#     # Step 2: Align the y-axis
-#     print("Step 2: Align the y-axis")
-#     print("Press 'W' or 'S' to move the source point cloud along the y-axis. Press 'I' to ignore the pair.")
-#     # vis = o3d.visualization.VisualizerWithKeyCallback()
-#     # vis.create_window()
-#     # vis.add_geometry(source_copy)
-#     # vis.add_geometry(target)
-#     y_translation = 0
+#     # Create a copy of source
+#     source_copy = copy.deepcopy(source)
     
-#     def move_up(vis):
-#         global source
-#         global source_copy
-#         global y_translation
-#         y_translation += 1
-#         trans_mat[1, 3] = y_translation
-#         source_copy.transform(trans_mat)
-#         update_visualization(vis, source, source_copy)
+#     # Convert the points in the target point cloud to a NumPy array
+#     target_points = np.asarray(target.points)
+    
+#     # Find the index of the point with the maximum Z coordinate
+#     max_z_index = np.argmax(target_points[:, 2])
+    
+#     # Get the coordinates of the point with the maximum Z coordinate
+#     target_max_coords = target_points[max_z_index]
+    
+#     # Paint the point clouds for visualization
+#     print('Preparing point cloud pair')
+#     source.paint_uniform_color([1, 0.706, 0])
+#     source_copy.paint_uniform_color([1, 0.706, 0])
+#     target.paint_uniform_color([0, 0.651, 0.929])  
 
-#     def move_down(vis):
-#         global source
-#         global source_copy
-#         global y_translation
-#         y_translation -= 1
-#         trans_mat[1, 3] = y_translation
-#         source_copy.transform(trans_mat)
-#         update_visualization(vis, source, source_copy)
+#     # Set up the visualization
+#     print("Press 'W', 'A', 'S', 'D', 'R', or 'F' to move the source point cloud")
+#     print("Press 'Q' to save transformation and move to the next pair")
+#     print("Press 'I' to ignore this pair and move to the next pair")
+#     vis = set_up_vis(source_copy, target, target_max_coords)
+    
+#     cum_trans = np.eye(4)
+    
+#     # Flag variable to indicate when to move to the next pair
+#     next_pair = False
 
+#     def move_left(vis, source, size=1): #.0.05 
+#         global cum_trans
+#         trans = np.eye(4)
+#         trans[0,3] -= size
+#         cum_trans = np.dot(trans,cum_trans)
+#         source.transform(trans)
+#         update_visualization(vis, source)
+
+#     def move_right(vis, source, size=1):
+#         global cum_trans
+#         trans = np.eye(4)
+#         trans[0,3] += size
+#         cum_trans = np.dot(trans,cum_trans)
+#         source.transform(trans)
+#         update_visualization(vis, source)
+
+#     def move_up(vis, source, size=1):
+#         global cum_trans
+#         trans = np.eye(4)
+#         trans[1,3] += size
+#         cum_trans = np.dot(trans,cum_trans)
+#         source.transform(trans)
+#         update_visualization(vis, source)
+
+#     def move_down(vis, source, size=1):
+#         global cum_trans
+#         trans = np.eye(4)
+#         trans[1,3] -= size
+#         cum_trans = np.dot(trans,cum_trans)
+#         source.transform(trans)
+#         update_visualization(vis, source)
+
+#     def move_forward(vis, source, size=1):
+#         global cum_trans
+#         trans = np.eye(4)
+#         trans[2,3] -= size
+#         cum_trans = np.dot(trans,cum_trans)
+#         source.transform(trans)
+#         update_visualization(vis, source)
+
+#     def move_backward(vis, source, size=1):
+#         global cum_trans
+#         trans = np.eye(4)
+#         trans[2,3] += size
+#         cum_trans = np.dot(trans,cum_trans)
+#         source.transform(trans)
+#         update_visualization(vis, source)
+
+#     def ignore_pair(vis):
+#       pass
+        
+#     def save_transform_and_move_to_next_pair(vis,cumulative_transform,list_of_transforms):
+#       global next_pair
+#       print('Saving cumulative transformation')
+#       list_of_transforms.append(cumulative_transform)
+#       next_pair = True
+
+    
 #     # Register key callbacks to move point cloud along the x-axis
-#     vis.register_key_callback(ord("W"), lambda vis: move_up(vis))
-#     vis.register_key_callback(ord("S"), lambda vis: move_down(vis))
-#     vis.register_key_callback(ord("I"), ignore_pair)
+#     vis.register_key_callback(ord("W"), lambda vis: move_up(vis, source_copy))
+#     vis.register_key_callback(ord("A"), lambda vis: move_left(vis, source_copy))
+#     vis.register_key_callback(ord("S"), lambda vis: move_down(vis, source_copy))
+#     vis.register_key_callback(ord("D"), lambda vis: move_right(vis, source_copy))
+#     vis.register_key_callback(ord("R"), lambda vis: move_forward(vis, source_copy))
+#     vis.register_key_callback(ord("F"), lambda vis: move_backward(vis, source_copy))
+#     vis.register_key_callback(ord("I"), lambda vis: ignore_pair(vis))
+#     vis.register_key_callback(ord("Q"), lambda vis: save_transform_and_move_to_next_pair(vis,cum_trans,final_transformations))
     
-#     # Wait for user input before moving to the next step
-#     input("Press Enter to move to the next step...")
-#     # vis.run()
-#     # vis.destroy_window()
-
-# ####################################################################################################     
-#     # Step 3: Align the z-axis
-#     print("Step 3: Align the z-axis")
-#     print("Press 'R' or 'F' to move the source point cloud along the z-axis. Press 'I' to ignore the pair.")
-#     # vis = o3d.visualization.VisualizerWithKeyCallback()
-#     # vis.create_window()
-#     # vis.add_geometry(source_copy)
-#     # vis.add_geometry(target)
-#     z_translation = 0
+#     # Run the visualization
+#     vis.run()
     
-#     def move_forward(vis):
-#         global source
-#         global source_copy
-#         global z_translation
-#         z_translation += 1 
-#         trans_mat[2, 3] = z_translation
-#         source_copy.transform(trans_mat)
-#         update_visualization(vis, source, source_copy)
-
-#     def move_backward(vis):
-#         global source
-#         global source_copy
-#         global z_translation
-#         z_translation -= 1
-#         trans_mat[2, 3] = z_translation
-#         source_copy.transform(trans_mat)
-#         update_visualization(vis, source, source_copy)
-
-#     # Register key callbacks to move point cloud along the x-axis
-#     vis.register_key_callback(ord("R"), lambda vis: move_backward(vis))
-#     vis.register_key_callback(ord("F"), lambda vis: move_forward(vis))
-#     vis.register_key_callback(ord("I"), ignore_pair)
+#     # Check if the user wants to move to the next pair
+#     if next_pair:
+#         vis.destroy_window()
     
-#     # Wait for user input before moving to the next step
-#     input("Press Enter to move to the next step...")
-#     # vis.run()
-#     # vis.destroy_window()
+# final_transformation = np.mean(final_transformations,axis=0)
+# print(f'Final NS transformation: {final_transformation}')
+# # Save the final transformation to a file
+# np.save('ns_transformation.npy', final_transformation)

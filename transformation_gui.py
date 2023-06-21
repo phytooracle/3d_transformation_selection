@@ -16,7 +16,6 @@ from open3d.visualization import VisualizerWithKeyCallback
 import numpy as np
 import csv
 import copy
-from plyfile import PlyData
 import time
 import pandas as pd
 import multiprocessing

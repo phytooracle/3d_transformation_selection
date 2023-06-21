@@ -436,7 +436,7 @@ for i, (source, target) in enumerate(pcd_pairs):
     vis.register_key_callback(ord("D"), lambda vis: move_right(vis, source_copy))
     vis.register_key_callback(ord("R"), lambda vis: move_forward(vis, source_copy))
     vis.register_key_callback(ord("F"), lambda vis: move_backward(vis, source_copy))
-    vis.register_key_callback(ord("I"), lambda vis: ignore_pair(vis))
+    vis.register_key_callback(ord("I"), lambda vis: next_pair(vis))
     vis.register_key_callback(ord("Q"), lambda vis: save_transform_and_move_to_next_pair(vis,cum_trans,final_transformations))
 
     # Run and destroy the visualization

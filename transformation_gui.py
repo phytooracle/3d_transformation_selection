@@ -114,113 +114,6 @@ if not os.path.isdir(local_path):
     tar.extractall()
     tar.close()
 
-
-def open_ply(filepath):
-    # Read the PLY file into a numpy array
-    plydata = PlyData.read(filepath)
-    vertex = plydata['vertex']
-    x = vertex['x']
-    y = vertex['y']
-    z = vertex['z']
-    xyz = np.column_stack((x, y, z))
-
-    # Pass the numpy array to Open3D
-    pcd = o3d.geometry.PointCloud()
-    pcd.points = o3d.utility.Vector3dVector(xyz)
-
-    # Return the Open3D point cloud object
-    return pcd
-
-def pick_points(pcd):
-    # Convert the point cloud to a numpy array
-    points = np.asarray(pcd.points)
-
-    # Calculate the centroid of the points with the maximum z-coordinate
-    max_z = np.max(points[:, 2])
-    tallest_points = points[points[:, 2] == max_z]
-    centroid = np.mean(tallest_points, axis=0)
-
-    # Calculate the bounding box of the point cloud
-    bbox = pcd.get_axis_aligned_bounding_box()
-    bbox_dim = bbox.get_extent()
-
-    # Calculate an appropriate radius for the sphere based on the bounding box dimensions
-    sphere_radius = np.min(bbox_dim) * 0.05
-
-    # Create a sphere marker at the location of the centroid
-    sphere = o3d.geometry.TriangleMesh.create_sphere(radius=sphere_radius)
-    sphere.translate(centroid)
-    sphere.paint_uniform_color([1, 0, 0])
-
-    # Set up a visualization window
-    vis = o3d.visualization.VisualizerWithEditing()
-    vis.create_window()
-    vis.add_geometry(pcd)
-    vis.add_geometry(sphere)
-
-    # Get the current view control
-    view_control = vis.get_view_control()
-
-    # Set the camera lookat to the centroid of the tallest points
-    view_control.set_lookat(centroid)
-
-    # Prompt the user to select a point or press "Escape" to cancel
-    print("Select a point or press 'Escape' to cancel.")
-
-    # Run the visualization
-    vis.run()
-    vis.destroy_window()
-
-    if len(vis.get_picked_points()) == 0:
-        return centroid
-    else:
-        return vis.get_picked_points() #points[vis.get_picked_points()[0]]
-
-def pick_points(pcd):
-    # Convert the point cloud to a numpy array
-    points = np.asarray(pcd.points)
-
-    # Calculate the centroid of the points with the maximum z-coordinate
-    max_z = np.max(points[:, 2])
-    tallest_points = points[points[:, 2] == max_z]
-    centroid = np.mean(tallest_points, axis=0)
-
-    # Calculate the bounding box of the point cloud
-    bbox = pcd.get_axis_aligned_bounding_box()
-    bbox_dim = bbox.get_extent()
-
-    # Calculate an appropriate radius for the sphere based on the bounding box dimensions
-    sphere_radius = np.min(bbox_dim) * 0.05
-
-    # Create a sphere marker at the location of the centroid
-    sphere = o3d.geometry.TriangleMesh.create_sphere(radius=sphere_radius)
-    sphere.translate(centroid)
-    sphere.paint_uniform_color([1, 0, 0])
-
-    # Set up a visualization window
-    vis = o3d.visualization.VisualizerWithEditing()
-    vis.create_window()
-    vis.add_geometry(pcd)
-    vis.add_geometry(sphere)
-
-    # Get the current view control
-    view_control = vis.get_view_control()
-
-    # Set the camera lookat to the centroid of the tallest points
-    view_control.set_lookat(centroid)
-
-    # Prompt the user to select a point or press "Escape" to cancel
-    print("Select a point or press 'Escape' to cancel.")
-
-    # Run the visualization
-    vis.run()
-    vis.destroy_window()
-
-    if len(vis.get_picked_points()) == 0:
-        return centroid
-    else:
-        return vis.get_picked_points() #points[vis.get_picked_points()[0]]
-    
 def ransac_transform_and_get_inliers(args):
 
     source_down_points = args[0]
@@ -439,15 +332,6 @@ def update_visualization(vis, source):
     vis.poll_events()
     vis.update_renderer()
 
-def set_up_vis(source_copy, target):
-
-    vis = o3d.visualization.VisualizerWithKeyCallback()
-    vis.create_window()
-    vis.add_geometry(source_copy)
-    vis.add_geometry(target)
-
-    return vis
-
 def move_left(vis, source, size=1):
     global cum_trans
     trans = np.eye(4)
@@ -518,11 +402,6 @@ def save_transform_and_move_to_next_pair(vis,cumulative_transform,list_of_transf
     vis.destroy_window()
     print('vis.destroy_window() called')
 
-def run_destroy_vis(vis):
-
-    vis.run()
-    vis.destroy_window()
-
 # Initialize the Open3D GUI application
 Application.instance.initialize()
 print(f'Length of pcd_pairs: {len(pcd_pairs)}')
@@ -543,7 +422,11 @@ for i, (source, target) in enumerate(pcd_pairs):
     print("Press 'W', 'A', 'S', 'D', 'R', or 'F' to move the source point cloud")
     print("Press 'Q' to save transformation and move to the next pair")
     print("Press 'I' to ignore this pair and move to the next pair")
-    vis = set_up_vis(source_copy, target)
+
+    vis = o3d.visualization.VisualizerWithKeyCallback()
+    vis.create_window()
+    vis.add_geometry(source_copy)
+    vis.add_geometry(target)
     
     cum_trans = np.eye(4)
 
@@ -558,7 +441,8 @@ for i, (source, target) in enumerate(pcd_pairs):
     vis.register_key_callback(ord("Q"), lambda vis: save_transform_and_move_to_next_pair(vis,cum_trans,final_transformations))
 
     # Run and destroy the visualization
-    run_destroy_vis(vis)
+    vis.run()
+    vis.destroy_window()
     
     # Delete or reassign variables that are no longer needed
     del source_copy

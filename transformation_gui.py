@@ -46,14 +46,29 @@ def select_dir_path(dir_paths):
 
     dialog = tk.Toplevel(root)
     dialog.title("Select Season")
-    dialog.geometry("500x300")
+    
+    # Set window size
+    window_width = 900
+    window_height = 500
+    
+    # Calculate x and y coordinates for the top-left corner of the window
+    screen_width = root.winfo_screenwidth()
+    screen_height = root.winfo_screenheight()
+    x = (screen_width / 2) - (window_width / 2)
+    y = (screen_height / 2) - (window_height / 2)
+    
+    # Set window geometry
+    dialog.geometry(f'{window_width}x{window_height}+{int(x)}+{int(y)}')
 
     label = tk.Label(dialog, text="Select a season:")
     label.pack()
 
     dir_path_var = tk.StringVar()
     dir_path_var.set(list(dir_paths.keys())[0])
-    dir_path_menu = ttk.Combobox(dialog, textvariable=dir_path_var, values=list(dir_paths.keys()))
+    
+    # Set the width of the drop-down menu
+    dir_path_menu = ttk.Combobox(dialog, textvariable=dir_path_var, values=list(dir_paths.keys()), width=50)
+    
     dir_path_menu.bind("<<ComboboxSelected>>", on_select)
     dir_path_menu.pack()
 
@@ -63,6 +78,7 @@ def select_dir_path(dir_paths):
     root.wait_window(dialog)
 
     return selected_dir_path
+
 
 dir_path = select_dir_path(dir_paths)
 
@@ -83,14 +99,29 @@ def select_tar_file(tar_files):
 
     dialog = tk.Toplevel(root)
     dialog.title("Select Tar File")
-    dialog.geometry("500x300")
+    
+    # Set window size
+    window_width = 900
+    window_height = 500
+    
+    # Calculate x and y coordinates for the top-left corner of the window
+    screen_width = root.winfo_screenwidth()
+    screen_height = root.winfo_screenheight()
+    x = (screen_width / 2) - (window_width / 2)
+    y = (screen_height / 2) - (window_height / 2)
+    
+    # Set window geometry
+    dialog.geometry(f'{window_width}x{window_height}+{int(x)}+{int(y)}')
 
     label = tk.Label(dialog, text="Select a tar file:")
     label.pack()
 
     tar_file_var = tk.StringVar()
     tar_file_var.set(tar_files[0])
-    tar_file_menu = ttk.Combobox(dialog, textvariable=tar_file_var, values=tar_files)
+    
+    # Set the width of the drop-down menu
+    tar_file_menu = ttk.Combobox(dialog, textvariable=tar_file_var, values=tar_files, width=50)
+    
     tar_file_menu.bind("<<ComboboxSelected>>", on_select)
     tar_file_menu.pack()
 
@@ -100,6 +131,7 @@ def select_tar_file(tar_files):
     root.wait_window(dialog)
 
     return selected_tar_file
+
 
 selected_tar_file = select_tar_file(tar_files)
 local_path = selected_tar_file.split(".")[0]
@@ -241,7 +273,7 @@ def load_metadata_dict(path):
 # Create an empty list to store each pair of point clouds
 pcd_pairs = []
 
-for subdir, dirs, files in os.walk("."):
+for subdir, dirs, files in os.walk(local_path): #"."):
     ply_files = [file for file in files if file.endswith(".ply")]
     json_files = [file for file in files if file.endswith(".json")]
 
@@ -262,7 +294,7 @@ for subdir, dirs, files in os.walk("."):
 
                     # Measure the time it takes to downsample the east point cloud
                     start = time.time()
-                    down_east_pcd = copy.deepcopy(east_pcd).voxel_down_sample(voxel_size=20)
+                    down_east_pcd = copy.deepcopy(east_pcd).voxel_down_sample(voxel_size=15)
                     end = time.time()
                     print(f'Time taken to downsample {item}: {end - start:.2f} seconds')
                 
@@ -278,7 +310,7 @@ for subdir, dirs, files in os.walk("."):
 
                     # Measure the time it takes to downsample the west point cloud
                     start = time.time()
-                    down_west_pcd = copy.deepcopy(west_pcd).voxel_down_sample(voxel_size=20)
+                    down_west_pcd = copy.deepcopy(west_pcd).voxel_down_sample(voxel_size=15)
                     end = time.time()
                     print(f'Time taken to downsample {item}: {end - start:.2f} seconds')
             
@@ -385,29 +417,38 @@ def ignore_pair(vis):
 
 def next_pair(vis):
     # Stop the visualization
-    vis.register_animation_callback(None)
-    vis.poll_events()
-    vis.update_renderer()
-    vis.destroy_window()
+    # vis.register_animation_callback(None)
+    # vis.poll_events()
+    # vis.update_renderer()
+    # vis.destroy_window()
+    vis.clear_geometries()
+    vis.close()
 
 def save_transform_and_move_to_next_pair(vis,cumulative_transform,list_of_transforms):
-
+    global e_pressed
+    e_pressed = True
     print('Saving cumulative transformation')
     list_of_transforms.append(cumulative_transform)
     print('Saved cumulative transformation')
-    vis.clear_geometries()
-    vis.register_animation_callback(None)
-    vis.poll_events()
-    vis.update_renderer()
-    vis.destroy_window()
+    
+def close_window(vis):
+    if e_pressed:
+        print('Closing window.')
+        # vis.destroy_window()
+        vis.clear_geometries()
+        vis.close()
+        print('Window closed')
+    else:
+        print("Please press 'E' before quitting")
 
 # Initialize the Open3D GUI application
-Application.instance.initialize()
+# Application.instance.initialize()
+
 print(f'Length of pcd_pairs: {len(pcd_pairs)}')
 # Step 1: Align the point clouds within each pair
 final_transformations = []
 for i, (source, target) in enumerate(pcd_pairs):
-    
+    e_pressed = False
     # Create a copy of source
     source_copy = copy.deepcopy(source)
     
@@ -417,16 +458,41 @@ for i, (source, target) in enumerate(pcd_pairs):
     source_copy.paint_uniform_color([1, 0.706, 0])
     target.paint_uniform_color([0, 0.651, 0.929])  
 
+
+    
     # Set up the visualization
     print("Press 'W', 'A', 'S', 'D', 'R', or 'F' to move the source point cloud")
-    print("Press 'Q' to save transformation and move to the next pair")
-    print("Press 'I' to ignore this pair and move to the next pair")
+    print("Press 'E' to save transformation")
+    print("Press 'Q' to move to next pair")
+    # print("Press 'I' to ignore this pair and move to the next pair")
+    # print("Press 'Q' to quit and move to the next pair")
 
     vis = o3d.visualization.VisualizerWithKeyCallback()
     vis.create_window()
+    vis.toggle_full_screen()
+    # Application.instance.run()
+
+    # Add point clouds
     vis.add_geometry(source_copy)
     vis.add_geometry(target)
-    
+
+    # Get the view control
+    view_control = vis.get_view_control()
+
+    # Find the tallest Z point in the target point cloud
+    target_points = np.asarray(target.points)
+    max_z_index = np.argmax(target_points[:,2])
+    max_z_point = target_points[max_z_index]
+    view_control.set_lookat(max_z_point)
+
+    # Set the front vector of the visualizer to point in the negative z direction
+    front = [0, 0, -1]
+    view_control.set_front(front)
+
+    # Set the up vector of the visualizer to point in the positive y direction
+    up = [0, 1, 0]
+    view_control.set_up(up)
+
     cum_trans = np.eye(4)
 
     # Register key callbacks to move point cloud along the x-axis
@@ -437,12 +503,14 @@ for i, (source, target) in enumerate(pcd_pairs):
     vis.register_key_callback(ord("R"), lambda vis: move_forward(vis, source_copy))
     vis.register_key_callback(ord("F"), lambda vis: move_backward(vis, source_copy))
     vis.register_key_callback(ord("I"), lambda vis: next_pair(vis))
-    vis.register_key_callback(ord("Q"), lambda vis: save_transform_and_move_to_next_pair(vis,cum_trans,final_transformations))
+    vis.register_key_callback(ord("E"), lambda vis: save_transform_and_move_to_next_pair(vis,cum_trans,final_transformations))
+    vis.register_key_callback(ord("Q"), close_window)
 
     # Run and destroy the visualization
+    vis.poll_events()
     vis.run()
     vis.destroy_window()
-    
+
     # Delete or reassign variables that are no longer needed
     del source_copy
 
@@ -452,6 +520,26 @@ print(f'Final EW transformation: {final_transformation}')
 
 # Save the final transformation to a file
 np.save('ew_transformation.npy', final_transformation)
+
+# Save the final transformation to a text file
+np.savetxt('ew_transformation.txt', final_transformation)
+
+# Apply final transformation to each source point cloud in pcd_pairs
+for i, (source, target) in enumerate(pcd_pairs):
+    source.transform(final_transformation)
+
+# Update pcd_pairs
+pcd_pairs = [(source, target) for (source, target) in pcd_pairs]
+
+# Create a list of all point clouds
+all_point_clouds = []
+for i, (source, target) in enumerate(pcd_pairs):
+    all_point_clouds.append(source)
+    all_point_clouds.append(target)
+
+# Visualize all point cloud pairs in a single visualization
+o3d.visualization.draw_geometries(all_point_clouds)
+
 
 # # Step 2: Align all point clouds
 # final_transformations = []

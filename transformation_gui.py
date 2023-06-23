@@ -443,7 +443,7 @@ def close_window(vis):
     else:
         print("Please press 'E' before quitting")
 
-# Step 1: Align the point clouds within each pair
+# Step 1: Align the point clouds within each pair (EW)
 final_transformations = []
 for i, (source, target) in enumerate(pcd_pairs):
     
@@ -477,12 +477,12 @@ for i, (source, target) in enumerate(pcd_pairs):
     cum_trans = np.eye(4)
 
     # Register key callbacks to move point cloud along the x-axis
-    vis.register_key_callback(ord("W"), lambda vis: move_up(vis, source_copy))
-    vis.register_key_callback(ord("A"), lambda vis: move_left(vis, source_copy))
-    vis.register_key_callback(ord("S"), lambda vis: move_down(vis, source_copy))
-    vis.register_key_callback(ord("D"), lambda vis: move_right(vis, source_copy))
-    vis.register_key_callback(ord("R"), lambda vis: move_forward(vis, source_copy))
-    vis.register_key_callback(ord("F"), lambda vis: move_backward(vis, source_copy))
+    vis.register_key_callback(ord("W"), lambda vis: move_up(vis, source_copy, size=5))
+    vis.register_key_callback(ord("A"), lambda vis: move_left(vis, source_copy, size=5))
+    vis.register_key_callback(ord("S"), lambda vis: move_down(vis, source_copy, size=5))
+    vis.register_key_callback(ord("D"), lambda vis: move_right(vis, source_copy, size=5))
+    vis.register_key_callback(ord("R"), lambda vis: move_forward(vis, source_copy, size=5))
+    vis.register_key_callback(ord("F"), lambda vis: move_backward(vis, source_copy, size=5))
     vis.register_key_callback(ord("I"), lambda vis: next_pair(vis))
     vis.register_key_callback(ord("E"), lambda vis: save_transform_and_move_to_next_pair(vis,cum_trans,final_transformations))
     vis.register_key_callback(ord("Q"), close_window)
@@ -509,8 +509,8 @@ np.savetxt('ew_transformation.txt', final_transformation)
 for i, (source, target) in enumerate(pcd_pairs):
     source.transform(final_transformation)
 
-# Update pcd_pairs
-pcd_pairs = [(source, target) for (source, target) in pcd_pairs]
+# # Update pcd_pairs
+# pcd_pairs = [(source, target) for (source, target) in pcd_pairs]
 
 # Create a list of all point clouds
 all_point_clouds = []
@@ -529,7 +529,7 @@ for i in range(len(pcd_pairs)):
     source = pcd_pairs[i][0]
     target = pcd_pairs[i][1]
     merged_point_cloud = source + target
-    voxel_size = 10 # Set the voxel size for downsampling
+    voxel_size = 15 # Set the voxel size for downsampling
     downsampled_merged_point_cloud = o3d.geometry.PointCloud.voxel_down_sample(merged_point_cloud, voxel_size)
     merged_point_clouds.append(downsampled_merged_point_cloud)
 
@@ -594,7 +594,11 @@ np.savetxt('ns_transformation.txt', final_transformation)
 # Apply final transformation to each target point cloud in pcd_pairs
 for i in range(len(merged_point_clouds)):
     if i % 2 == 0:
+        print(f'i: {i}')
         merged_point_clouds[i].transform(final_transformation)
+
+# # Update pcd_pairs
+# merged_point_clouds = [merged_point_cloud for merged_point_cloud in merged_point_clouds]
 
 # Visualize all merged point clouds in a single visualization
 o3d.visualization.draw_geometries(merged_point_clouds, window_name='Final transformation')

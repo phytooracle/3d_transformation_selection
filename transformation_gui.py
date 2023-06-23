@@ -12,6 +12,7 @@ from tkinter import ttk
 from tkinter import filedialog
 import tarfile
 import os
+import sys
 # from open3d.visualization import VisualizerWithKeyCallback
 import numpy as np
 import copy
@@ -20,7 +21,7 @@ import pandas as pd
 import multiprocessing
 import json
 from open3d.visualization.gui import Application
-
+sys.setrecursionlimit(10000) # Set the maximum recursion depth to 10000
 
 root = tk.Tk()
 root.withdraw()
@@ -141,7 +142,7 @@ if not os.path.isdir(local_path):
     print(f'Downloading {select_tar_file}.')
     subprocess.run(["iget", "-PVT", os.path.join(dir_path, selected_tar_file)]) #, local_path])
     
-    print(f'Extracting {select_tar_file} at {local_path}.')
+    print(f'Extracting at {local_path}.')
     tar = tarfile.open(selected_tar_file, "r:gz")
     tar.extractall()
     tar.close()
@@ -273,7 +274,8 @@ def load_metadata_dict(path):
 # Create an empty list to store each pair of point clouds
 pcd_pairs = []
 
-for subdir, dirs, files in os.walk(local_path): #"."):
+for subdir, dirs, files in os.walk(local_path):
+    dirs.sort()
     ply_files = [file for file in files if file.endswith(".ply")]
     json_files = [file for file in files if file.endswith(".json")]
 
@@ -441,14 +443,12 @@ def close_window(vis):
     else:
         print("Please press 'E' before quitting")
 
-# Initialize the Open3D GUI application
-# Application.instance.initialize()
-
-print(f'Length of pcd_pairs: {len(pcd_pairs)}')
 # Step 1: Align the point clouds within each pair
 final_transformations = []
 for i, (source, target) in enumerate(pcd_pairs):
+    
     e_pressed = False
+
     # Create a copy of source
     source_copy = copy.deepcopy(source)
     
@@ -458,8 +458,6 @@ for i, (source, target) in enumerate(pcd_pairs):
     source_copy.paint_uniform_color([1, 0.706, 0])
     target.paint_uniform_color([0, 0.651, 0.929])  
 
-
-    
     # Set up the visualization
     print("Press 'W', 'A', 'S', 'D', 'R', or 'F' to move the source point cloud")
     print("Press 'E' to save transformation")
@@ -523,133 +521,69 @@ for i, (source, target) in enumerate(pcd_pairs):
 # Visualize all point cloud pairs in a single visualization
 o3d.visualization.draw_geometries(all_point_clouds, window_name='Final EW transformation')
 
-del all_point_clouds
+del all_point_clouds, cum_trans, final_transformations, final_transformation
 
-# Step 2: Visualize all pairs of source and target point clouds
-def move_up(vis, point_clouds, cum_trans):
-    trans = np.eye(4)
-    trans[1, 3] = 0.05
-    cum_trans = cum_trans @ trans
-    for pcd in point_clouds:
-        pcd.transform(trans)
-    vis.update_geometry()
-    vis.poll_events()
-    vis.update_renderer()
+# Step 2: Align pairs to each other
+merged_point_clouds = []
+for i in range(len(pcd_pairs)):
+    source = pcd_pairs[i][0]
+    target = pcd_pairs[i][1]
+    merged_point_cloud = source + target
+    voxel_size = 10 # Set the voxel size for downsampling
+    downsampled_merged_point_cloud = o3d.geometry.PointCloud.voxel_down_sample(merged_point_cloud, voxel_size)
+    merged_point_clouds.append(downsampled_merged_point_cloud)
 
-def move_down(vis, point_clouds, cum_trans):
-    trans = np.eye(4)
-    trans[1, 3] = -0.05
-    cum_trans = cum_trans @ trans
-    for pcd in point_clouds:
-        pcd.transform(trans)
-    vis.update_geometry()
-    vis.poll_events()
-    vis.update_renderer()
+del pcd_pairs
 
-def move_left(vis, point_clouds, cum_trans):
-    trans = np.eye(4)
-    trans[0, 3] = -0.05
-    cum_trans = cum_trans @ trans
-    for pcd in point_clouds:
-        pcd.transform(trans)
-    vis.update_geometry()
-    vis.poll_events()
-    vis.update_renderer()
-
-def move_right(vis, point_clouds, cum_trans):
-    trans = np.eye(4)
-    trans[0, 3] = 0.05
-    cum_trans = cum_trans @ trans
-    for pcd in point_clouds:
-        pcd.transform(trans)
-    vis.update_geometry()
-    vis.poll_events()
-    vis.update_renderer()
-
-def move_forward(vis, point_clouds, cum_trans):
-    trans = np.eye(4)
-    trans[2, 3] = 0.05
-    cum_trans = cum_trans @ trans
-    for pcd in point_clouds:
-        pcd.transform(trans)
-    vis.update_geometry()
-    vis.poll_events()
-    vis.update_renderer()
-
-def move_backward(vis, point_clouds, cum_trans):
-    trans = np.eye(4)
-    trans[2, 3] = -0.05
-    cum_trans = cum_trans @ trans
-    for pcd in point_clouds:
-        pcd.transform(trans)
-    vis.update_geometry()
-    vis.poll_events()
-    vis.update_renderer()
-
-def save_transform_and_quit(vis,cum_trans,final_transformations):
-    global e_pressed
-    e_pressed = True
-    print('Saving cumulative transformation')
-    final_transformations.append(cum_trans)
-    print('Saved cumulative transformation')
-
-# Create a list of all point clouds
-e_pressed = False
-all_point_clouds = []
 final_transformations = []
-for i, (source, target) in enumerate(pcd_pairs):
-    # Create a copy of source
-    source_copy = copy.deepcopy(source)
+for i in range(len(merged_point_clouds)-1):
     
+    e_pressed = False
+
+    source = merged_point_clouds[i]
+    target = merged_point_clouds[i+1]
+    source_copy = copy.deepcopy(source)
+
     # Paint the point clouds for visualization
     print('Preparing point cloud pair')
     source.paint_uniform_color([1, 0.706, 0])
     source_copy.paint_uniform_color([1, 0.706, 0])
     target.paint_uniform_color([0, 0.651, 0.929])  
     
-    # Merge source_copy and target
-    merged_pcd = source_copy + target
-    
-    # Add merged point cloud to list
-    all_point_clouds.append(merged_pcd)
+    # Set up the visualization
+    print("Press 'W', 'A', 'S', 'D', 'R', or 'F' to move the source point cloud")
+    print("Press 'E' to save transformation")
+    print("Press 'Q' to move to next pair")
 
-print(f"Length of all point clouds: {len(all_point_clouds)}")
+    vis = o3d.visualization.VisualizerWithKeyCallback()
+    vis.create_window()
+    vis.toggle_full_screen()
 
-cum_trans = np.eye(4)
+    # Add point clouds
+    vis.add_geometry(source_copy)
+    vis.add_geometry(target)
 
-# Set up the visualization
-print("Press 'W', 'A', 'S', 'D', 'R', or 'F' to move every other pair of source and target point clouds")
-print("Press 'E' to save transformation")
-print("Press 'Q' to quit")
+    cum_trans = np.eye(4)
 
-vis = o3d.visualization.VisualizerWithKeyCallback()
-vis.create_window(window_name='All Pairs')
+    # Register key callbacks to move point cloud along the x-axis
+    vis.register_key_callback(ord("W"), lambda vis: move_up(vis, source_copy, size=10))
+    vis.register_key_callback(ord("A"), lambda vis: move_left(vis, source_copy, size=10))
+    vis.register_key_callback(ord("S"), lambda vis: move_down(vis, source_copy, size=10))
+    vis.register_key_callback(ord("D"), lambda vis: move_right(vis, source_copy, size=10))
+    vis.register_key_callback(ord("R"), lambda vis: move_forward(vis, source_copy, size=10))
+    vis.register_key_callback(ord("F"), lambda vis: move_backward(vis, source_copy, size=10))
+    vis.register_key_callback(ord("I"), lambda vis: next_pair(vis))
+    vis.register_key_callback(ord("E"), lambda vis: save_transform_and_move_to_next_pair(vis,cum_trans,final_transformations))
+    vis.register_key_callback(ord("Q"), close_window)
 
-# Add point clouds
-for pcd in all_point_clouds:
-    vis.add_geometry(pcd)
-
-# Register key callbacks to move every other pair of point clouds along the x-axis
-vis.register_key_callback(ord("W"), lambda vis: move_up(vis, all_point_clouds[::2], cum_trans))
-vis.register_key_callback(ord("A"), lambda vis: move_left(vis, all_point_clouds[::2], cum_trans))
-vis.register_key_callback(ord("S"), lambda vis: move_down(vis, all_point_clouds[::2], cum_trans))
-vis.register_key_callback(ord("D"), lambda vis: move_right(vis, all_point_clouds[::2], cum_trans))
-vis.register_key_callback(ord("R"), lambda vis: move_forward(vis, all_point_clouds[::2], cum_trans))
-vis.register_key_callback(ord("F"), lambda vis: move_backward(vis, all_point_clouds[::2], cum_trans))
-vis.register_key_callback(ord("I"), lambda vis: next_pair(vis))
-vis.register_key_callback(ord("E"), lambda vis: save_transform_and_move_to_next_pair(vis,cum_trans,final_transformations))
-vis.register_key_callback(ord("Q"), close_window)
-
-# Run and destroy the visualization
-vis.poll_events()
-vis.run()
-vis.destroy_window()
-
-# Delete or reassign variables that are no longer needed
-del all_point_clouds
+    # Run and destroy the visualization
+    vis.poll_events()
+    vis.run()
+    vis.destroy_window()
 
 # Calculate the final transformation based on all transformations
 final_transformation = np.mean(final_transformations,axis=0)
+print(f'Final NS transformation: {final_transformation}')
 
 # Save the final transformation to a file
 np.save('ns_transformation.npy', final_transformation)
@@ -657,18 +591,12 @@ np.save('ns_transformation.npy', final_transformation)
 # Save the final transformation to a text file
 np.savetxt('ns_transformation.txt', final_transformation)
 
-# Apply final transformation to each source point cloud in pcd_pairs
-for i, (source, target) in enumerate(pcd_pairs):
-    source.transform(final_transformation)
+# Apply final transformation to each target point cloud in pcd_pairs
+for i in range(len(merged_point_clouds)):
+    if i % 2 == 0:
+        merged_point_clouds[i].transform(final_transformation)
 
-# Update pcd_pairs
-pcd_pairs = [(source, target) for (source, target) in pcd_pairs]
+# Visualize all merged point clouds in a single visualization
+o3d.visualization.draw_geometries(merged_point_clouds, window_name='Final transformation')
 
-# Create a list of all point clouds
-all_point_clouds = []
-for i, (source, target) in enumerate(pcd_pairs):
-    all_point_clouds.append(source)
-    all_point_clouds.append(target)
-
-# Visualize all point cloud pairs in a single visualization
-o3d.visualization.draw_geometries(all_point_clouds, window_name='Final Transformation')
+del merged_point_clouds

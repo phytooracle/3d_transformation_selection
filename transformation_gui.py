@@ -419,9 +419,6 @@ def move_backward(vis, source, size=1):
     source.transform(trans)
     update_visualization(vis, source)
 
-def ignore_pair(vis):
-    pass
-
 def next_pair(vis):
     # Stop the visualization
     # vis.register_animation_callback(None)
@@ -449,7 +446,7 @@ def close_window(vis):
         print("Please press 'E' before quitting")
 
 # Step 1: Align the point clouds within each pair (EW)
-final_transformations = []
+ew_final_transformations = []
 for i, (source, target) in enumerate(pcd_pairs):
     
     e_pressed = False
@@ -467,8 +464,7 @@ for i, (source, target) in enumerate(pcd_pairs):
     print("Press 'W', 'A', 'S', 'D', 'R', or 'F' to move the source point cloud")
     print("Press 'E' to save transformation")
     print("Press 'Q' to move to next pair")
-    # print("Press 'I' to ignore this pair and move to the next pair")
-    # print("Press 'Q' to quit and move to the next pair")
+    print("Press 'I' to ignore this pair and move to the next pair")
 
     vis = o3d.visualization.VisualizerWithKeyCallback()
     vis.create_window()
@@ -489,7 +485,7 @@ for i, (source, target) in enumerate(pcd_pairs):
     vis.register_key_callback(ord("R"), lambda vis: move_forward(vis, source_copy, size=5))
     vis.register_key_callback(ord("F"), lambda vis: move_backward(vis, source_copy, size=5))
     vis.register_key_callback(ord("I"), lambda vis: next_pair(vis))
-    vis.register_key_callback(ord("E"), lambda vis: save_transform_and_move_to_next_pair(vis,cum_trans,final_transformations))
+    vis.register_key_callback(ord("E"), lambda vis: save_transform_and_move_to_next_pair(vis,cum_trans,ew_final_transformations))
     vis.register_key_callback(ord("Q"), close_window)
 
     # Run and destroy the visualization
@@ -501,24 +497,12 @@ for i, (source, target) in enumerate(pcd_pairs):
     del source_copy
 
 # Calculate the final transformation based on all transformations
-final_transformation = np.mean(final_transformations,axis=0)
-print(f'Final EW transformation: {final_transformation}')
-
-# Save the individual transformations to a file
-np.save('ew_transformation_individual.npy', final_transformations)
-
-# Save the final transformation to a file
-np.save('ew_transformation_average.npy', final_transformation)
-
-# Save the final transformation to a text file
-np.savetxt('ew_transformation_average.txt', final_transformation)
+ew_final_transformation = np.mean(ew_final_transformations,axis=0)
+print(f'Final EW transformation: {ew_final_transformation}')
 
 # Apply final transformation to each source point cloud in pcd_pairs
 for i, (source, target) in enumerate(pcd_pairs):
-    source.transform(final_transformation)
-
-# # Update pcd_pairs
-# pcd_pairs = [(source, target) for (source, target) in pcd_pairs]
+    source.transform(ew_final_transformation)
 
 # Create a list of all point clouds
 all_point_clouds = []
@@ -529,9 +513,9 @@ for i, (source, target) in enumerate(pcd_pairs):
 # Visualize all point cloud pairs in a single visualization
 o3d.visualization.draw_geometries(all_point_clouds, window_name='Final EW transformation')
 
-del all_point_clouds, cum_trans, final_transformations, final_transformation
+del all_point_clouds, cum_trans
 
-# Step 2: Align pairs to each other
+# Step 2: Align pairs to each other (NS)
 merged_point_clouds = []
 for i in range(len(pcd_pairs)):
     source = pcd_pairs[i][0]
@@ -543,7 +527,7 @@ for i in range(len(pcd_pairs)):
 
 del pcd_pairs
 
-final_transformations = []
+ns_final_transformations = []
 for i in range(len(merged_point_clouds)-1):
     if pcd_directions[i] == "Positive":
         e_pressed = False
@@ -562,6 +546,7 @@ for i in range(len(merged_point_clouds)-1):
         print("Press 'W', 'A', 'S', 'D', 'R', or 'F' to move the source point cloud")
         print("Press 'E' to save transformation")
         print("Press 'Q' to move to next pair")
+        print("Press 'I' to ignore this pair and move to the next pair")
 
         vis = o3d.visualization.VisualizerWithKeyCallback()
         vis.create_window()
@@ -581,7 +566,7 @@ for i in range(len(merged_point_clouds)-1):
         vis.register_key_callback(ord("R"), lambda vis: move_forward(vis, source_copy, size=10))
         vis.register_key_callback(ord("F"), lambda vis: move_backward(vis, source_copy, size=10))
         vis.register_key_callback(ord("I"), lambda vis: next_pair(vis))
-        vis.register_key_callback(ord("E"), lambda vis: save_transform_and_move_to_next_pair(vis,cum_trans,final_transformations))
+        vis.register_key_callback(ord("E"), lambda vis: save_transform_and_move_to_next_pair(vis,cum_trans,ns_final_transformations))
         vis.register_key_callback(ord("Q"), close_window)
 
         # Run and destroy the visualization
@@ -590,35 +575,33 @@ for i in range(len(merged_point_clouds)-1):
         vis.destroy_window()
 
 # Calculate the final transformation based on all transformations
-final_transformation = np.mean(final_transformations,axis=0)
-print(f'Final NS transformation: {final_transformation}')
-
-# Save the individual transformations to a file
-np.save('ns_transformation_individual.npy', final_transformations)
-
-#################################################################################
-with h5py.File('ns_transformation_individual.h5', 'w') as f:
-    for i, transformation in enumerate(final_transformations):
-        f.create_dataset(f'transformation_{i}', data=transformation)
-#################################################################################
-
-# Save the final transformation to a file
-np.save('ns_transformation_average.npy', final_transformation)
-
-# Save the final transformation to a text file
-np.savetxt('ns_transformation_average.txt', final_transformation)
+ns_final_transformation = np.mean(ns_final_transformations,axis=0)
+print(f'Final NS transformation: {ns_final_transformation}')
 
 # Apply final transformation to each target point cloud in pcd_pairs
 for i in range(len(merged_point_clouds)):
     # if i % 2 == 0:
     if pcd_directions[i] == "Positive":
         print(f'i: {i}')
-        merged_point_clouds[i].transform(final_transformation)
-
-# # Update pcd_pairs
-# merged_point_clouds = [merged_point_cloud for merged_point_cloud in merged_point_clouds]
+        merged_point_clouds[i].transform(ns_final_transformation)
 
 # Visualize all merged point clouds in a single visualization
 o3d.visualization.draw_geometries(merged_point_clouds, window_name='Final transformation')
 
 del merged_point_clouds
+
+# Save H5 file
+with h5py.File('transformations.h5', 'w') as f:
+    ew_individual_grp = f.create_group('EW_individual')
+    for i, transformation in enumerate(ew_final_transformations):
+        ew_individual_grp.create_dataset(f'transformation_{i}', data=transformation)
+    
+    ns_individual_grp = f.create_group('NS_individual')
+    for i, transformation in enumerate(ns_final_transformations):
+        ns_individual_grp.create_dataset(f'transformation_{i}', data=transformation)
+    
+    ew_average_grp = f.create_group('EW_average')
+    ew_average_grp.create_dataset('transformation', data=ew_final_transformation)
+    
+    ns_average_grp = f.create_group('NS_average')
+    ns_average_grp.create_dataset('transformation', data=ns_final_transformation)

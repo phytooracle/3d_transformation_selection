@@ -272,9 +272,18 @@ def load_metadata_dict(path):
 
     return meta
 
+def get_direction(x_position: float) -> str:
+    if x_position < 216:
+        return "south"
+    else:
+        return "north"
+
 # Create an empty list to store each pair of point clouds
 pcd_pairs = []
 pcd_directions = []
+fields = []
+z_positions = []
+filenames = []
 
 for subdir, dirs, files in os.walk(local_path):
     dirs.sort()
@@ -322,7 +331,22 @@ for subdir, dirs, files in os.walk(local_path):
 
             print(f'Opening metadata file {meta_path}.')
             metadata = load_metadata_dict(meta_path)
+
+            # Get filename
+            filename = ''.join([subdir, item.split('__')[0]])
+
+            # Get field location
+            x_position = float(metadata['gantry_system_variable_metadata']['position x [m]'])
+            field = get_direction(x_position)
+
+            # Get box height
+            z_position = float(metadata['gantry_system_variable_metadata']['position z [m]'])
             
+            # Add filename, field locations, and box heights to lists
+            filenames.append(filename)
+            fields.append(field)
+            z_positions.append(z_position)
+
             print('Rotating point clouds.')
             new_east_down = rotate_pcd(down_east_pcd,90) #,merged_down_pcd)
             new_west_down = rotate_pcd(down_west_pcd,90) #,merged_down_pcd)
@@ -498,7 +522,7 @@ for i, (source, target) in enumerate(pcd_pairs):
 
 # Calculate the final transformation based on all transformations
 ew_final_transformation = np.mean(ew_final_transformations,axis=0)
-print(f'Final EW transformation: {ew_final_transformation}')
+np.save('ew_final_transformation.npy', ew_final_transformation)
 
 # Apply final transformation to each source point cloud in pcd_pairs
 for i, (source, target) in enumerate(pcd_pairs):
@@ -559,12 +583,12 @@ for i in range(len(merged_point_clouds)-1):
         cum_trans = np.eye(4)
 
         # Register key callbacks to move point cloud along the x-axis
-        vis.register_key_callback(ord("W"), lambda vis: move_up(vis, source_copy, size=10))
-        vis.register_key_callback(ord("A"), lambda vis: move_left(vis, source_copy, size=10))
-        vis.register_key_callback(ord("S"), lambda vis: move_down(vis, source_copy, size=10))
-        vis.register_key_callback(ord("D"), lambda vis: move_right(vis, source_copy, size=10))
-        vis.register_key_callback(ord("R"), lambda vis: move_forward(vis, source_copy, size=10))
-        vis.register_key_callback(ord("F"), lambda vis: move_backward(vis, source_copy, size=10))
+        vis.register_key_callback(ord("W"), lambda vis: move_up(vis, source_copy, size=20))
+        vis.register_key_callback(ord("A"), lambda vis: move_left(vis, source_copy, size=20))
+        vis.register_key_callback(ord("S"), lambda vis: move_down(vis, source_copy, size=20))
+        vis.register_key_callback(ord("D"), lambda vis: move_right(vis, source_copy, size=20))
+        vis.register_key_callback(ord("R"), lambda vis: move_forward(vis, source_copy, size=20))
+        vis.register_key_callback(ord("F"), lambda vis: move_backward(vis, source_copy, size=20))
         vis.register_key_callback(ord("I"), lambda vis: next_pair(vis))
         vis.register_key_callback(ord("E"), lambda vis: save_transform_and_move_to_next_pair(vis,cum_trans,ns_final_transformations))
         vis.register_key_callback(ord("Q"), close_window)
@@ -576,7 +600,7 @@ for i in range(len(merged_point_clouds)-1):
 
 # Calculate the final transformation based on all transformations
 ns_final_transformation = np.mean(ns_final_transformations,axis=0)
-print(f'Final NS transformation: {ns_final_transformation}')
+np.save('ns_final_transformation.npy', ns_final_transformation)
 
 # Apply final transformation to each target point cloud in pcd_pairs
 for i in range(len(merged_point_clouds)):
@@ -590,18 +614,47 @@ o3d.visualization.draw_geometries(merged_point_clouds, window_name='Final transf
 
 del merged_point_clouds
 
-# Save H5 file
-with h5py.File('transformations.h5', 'w') as f:
-    ew_individual_grp = f.create_group('EW_individual')
+with h5py.File(f'{local_path}_transformations.h5', 'w') as f:
+    ew_grp = f.create_group('EW')
+    ew_individual_grp = ew_grp.create_group('individual')
     for i, transformation in enumerate(ew_final_transformations):
         ew_individual_grp.create_dataset(f'transformation_{i}', data=transformation)
+    ew_individual_grp.create_dataset('fields', data=fields)
+    ew_individual_grp.create_dataset('z_positions', data=z_positions)
+    ew_individual_grp.create_dataset('filenames', data=filenames, dtype=h5py.special_dtype(vlen=str))
     
-    ns_individual_grp = f.create_group('NS_individual')
-    for i, transformation in enumerate(ns_final_transformations):
-        ns_individual_grp.create_dataset(f'transformation_{i}', data=transformation)
-    
-    ew_average_grp = f.create_group('EW_average')
+    ew_average_grp = ew_grp.create_group('average')
     ew_average_grp.create_dataset('transformation', data=ew_final_transformation)
     
-    ns_average_grp = f.create_group('NS_average')
+    ns_grp = f.create_group('NS')
+    ns_individual_grp = ns_grp.create_group('individual')
+    for i, transformation in enumerate(ns_final_transformations):
+        ns_individual_grp.create_dataset(f'transformation_{i}', data=transformation)
+    ns_individual_grp.create_dataset('fields', data=fields)
+    ns_individual_grp.create_dataset('z_positions', data=z_positions)
+    ns_individual_grp.create_dataset('filenames', data=filenames, dtype=h5py.special_dtype(vlen=str))
+
+    ns_average_grp = ns_grp.create_group('average')
     ns_average_grp.create_dataset('transformation', data=ns_final_transformation)
+# with h5py.File('transformations.h5', 'w') as f:
+#     ew_grp = f.create_group('EW')
+#     ew_individual_grp = ew_grp.create_group('individual')
+#     for i, transformation in enumerate(ew_final_transformations):
+#         ew_individual_grp.create_dataset(f'transformation_{i}', data=transformation)
+#     ew_individual_grp.create_dataset('fields', data=fields)
+#     ew_individual_grp.create_dataset('z_positions', data=z_positions)
+#     ew_individual_grp.create_dataset('filenames', data=filenames, dtype=h5py.special_dtype(vlen=str))
+    
+#     ew_average_grp = ew_grp.create_group('average')
+#     ew_average_grp.create_dataset('transformation', data=ew_final_transformation)
+    
+#     ns_grp = f.create_group('NS')
+#     ns_individual_grp = ns_grp.create_group('individual')
+#     for i, transformation in enumerate(ns_final_transformations):
+#         ns_individual_grp.create_dataset(f'transformation_{i}', data=transformation)
+#     ns_individual_grp.create_dataset('fields', data=fields)
+#     ns_individual_grp.create_dataset('z_positions', data=z_positions)
+#     ns_individual_grp.create_dataset('filenames', data=filenames, dtype=h5py.special_dtype(vlen=str))
+    
+#     ns_average_grp = ns_grp.create_group('average')
+#     ns_average_grp.create_dataset('transformation', data=ns_final_transformation)

@@ -21,6 +21,7 @@ import pandas as pd
 import multiprocessing
 import json
 from open3d.visualization.gui import Application
+import h5py
 sys.setrecursionlimit(10000) # Set the maximum recursion depth to 10000
 
 root = tk.Tk()
@@ -273,6 +274,7 @@ def load_metadata_dict(path):
 
 # Create an empty list to store each pair of point clouds
 pcd_pairs = []
+pcd_directions = []
 
 for subdir, dirs, files in os.walk(local_path):
     dirs.sort()
@@ -329,10 +331,13 @@ for subdir, dirs, files in os.walk(local_path):
 
                 new_east_down = new_east_down.translate([0,(float(metadata['gantry_system_variable_metadata']['position x [m]'])-3.798989)/(8.904483-7.964989)*1000,0])
                 new_west_down = new_west_down.translate([0,(float(metadata['gantry_system_variable_metadata']['position x [m]'])-3.798989)/(8.904483-7.964989)*1000,0])
+                pcd_directions.append("Negative")
             else:
 
                 new_east_down = new_east_down.translate([22280.82692587,(float(metadata['gantry_system_variable_metadata']['position x [m]'])-3.798989)/(8.904483-7.964989)*1000,0])
                 new_west_down = new_west_down.translate([22280.82692587,(float(metadata['gantry_system_variable_metadata']['position x [m]'])-3.798989)/(8.904483-7.964989)*1000,0])
+                pcd_directions.append("Positive")
+
             # store the pair of point clouds for later use
 
             print("Appending point cloud pair to list")
@@ -499,11 +504,14 @@ for i, (source, target) in enumerate(pcd_pairs):
 final_transformation = np.mean(final_transformations,axis=0)
 print(f'Final EW transformation: {final_transformation}')
 
+# Save the individual transformations to a file
+np.save('ew_transformation_individual.npy', final_transformations)
+
 # Save the final transformation to a file
-np.save('ew_transformation.npy', final_transformation)
+np.save('ew_transformation_average.npy', final_transformation)
 
 # Save the final transformation to a text file
-np.savetxt('ew_transformation.txt', final_transformation)
+np.savetxt('ew_transformation_average.txt', final_transformation)
 
 # Apply final transformation to each source point cloud in pcd_pairs
 for i, (source, target) in enumerate(pcd_pairs):
@@ -537,63 +545,73 @@ del pcd_pairs
 
 final_transformations = []
 for i in range(len(merged_point_clouds)-1):
-    
-    e_pressed = False
+    if pcd_directions[i] == "Positive":
+        e_pressed = False
 
-    source = merged_point_clouds[i]
-    target = merged_point_clouds[i+1]
-    source_copy = copy.deepcopy(source)
+        source = merged_point_clouds[i]
+        target = merged_point_clouds[i+1]
+        source_copy = copy.deepcopy(source)
 
-    # Paint the point clouds for visualization
-    print('Preparing point cloud pair')
-    source.paint_uniform_color([1, 0.706, 0])
-    source_copy.paint_uniform_color([1, 0.706, 0])
-    target.paint_uniform_color([0, 0.651, 0.929])  
-    
-    # Set up the visualization
-    print("Press 'W', 'A', 'S', 'D', 'R', or 'F' to move the source point cloud")
-    print("Press 'E' to save transformation")
-    print("Press 'Q' to move to next pair")
+        # Paint the point clouds for visualization
+        print('Preparing point cloud pair')
+        source.paint_uniform_color([1, 0.706, 0])
+        source_copy.paint_uniform_color([1, 0.706, 0])
+        target.paint_uniform_color([0, 0.651, 0.929])  
+        
+        # Set up the visualization
+        print("Press 'W', 'A', 'S', 'D', 'R', or 'F' to move the source point cloud")
+        print("Press 'E' to save transformation")
+        print("Press 'Q' to move to next pair")
 
-    vis = o3d.visualization.VisualizerWithKeyCallback()
-    vis.create_window()
-    vis.toggle_full_screen()
+        vis = o3d.visualization.VisualizerWithKeyCallback()
+        vis.create_window()
+        vis.toggle_full_screen()
 
-    # Add point clouds
-    vis.add_geometry(source_copy)
-    vis.add_geometry(target)
+        # Add point clouds
+        vis.add_geometry(source_copy)
+        vis.add_geometry(target)
 
-    cum_trans = np.eye(4)
+        cum_trans = np.eye(4)
 
-    # Register key callbacks to move point cloud along the x-axis
-    vis.register_key_callback(ord("W"), lambda vis: move_up(vis, source_copy, size=10))
-    vis.register_key_callback(ord("A"), lambda vis: move_left(vis, source_copy, size=10))
-    vis.register_key_callback(ord("S"), lambda vis: move_down(vis, source_copy, size=10))
-    vis.register_key_callback(ord("D"), lambda vis: move_right(vis, source_copy, size=10))
-    vis.register_key_callback(ord("R"), lambda vis: move_forward(vis, source_copy, size=10))
-    vis.register_key_callback(ord("F"), lambda vis: move_backward(vis, source_copy, size=10))
-    vis.register_key_callback(ord("I"), lambda vis: next_pair(vis))
-    vis.register_key_callback(ord("E"), lambda vis: save_transform_and_move_to_next_pair(vis,cum_trans,final_transformations))
-    vis.register_key_callback(ord("Q"), close_window)
+        # Register key callbacks to move point cloud along the x-axis
+        vis.register_key_callback(ord("W"), lambda vis: move_up(vis, source_copy, size=10))
+        vis.register_key_callback(ord("A"), lambda vis: move_left(vis, source_copy, size=10))
+        vis.register_key_callback(ord("S"), lambda vis: move_down(vis, source_copy, size=10))
+        vis.register_key_callback(ord("D"), lambda vis: move_right(vis, source_copy, size=10))
+        vis.register_key_callback(ord("R"), lambda vis: move_forward(vis, source_copy, size=10))
+        vis.register_key_callback(ord("F"), lambda vis: move_backward(vis, source_copy, size=10))
+        vis.register_key_callback(ord("I"), lambda vis: next_pair(vis))
+        vis.register_key_callback(ord("E"), lambda vis: save_transform_and_move_to_next_pair(vis,cum_trans,final_transformations))
+        vis.register_key_callback(ord("Q"), close_window)
 
-    # Run and destroy the visualization
-    vis.poll_events()
-    vis.run()
-    vis.destroy_window()
+        # Run and destroy the visualization
+        vis.poll_events()
+        vis.run()
+        vis.destroy_window()
 
 # Calculate the final transformation based on all transformations
 final_transformation = np.mean(final_transformations,axis=0)
 print(f'Final NS transformation: {final_transformation}')
 
+# Save the individual transformations to a file
+np.save('ns_transformation_individual.npy', final_transformations)
+
+#################################################################################
+with h5py.File('ns_transformation_individual.h5', 'w') as f:
+    for i, transformation in enumerate(final_transformations):
+        f.create_dataset(f'transformation_{i}', data=transformation)
+#################################################################################
+
 # Save the final transformation to a file
-np.save('ns_transformation.npy', final_transformation)
+np.save('ns_transformation_average.npy', final_transformation)
 
 # Save the final transformation to a text file
-np.savetxt('ns_transformation.txt', final_transformation)
+np.savetxt('ns_transformation_average.txt', final_transformation)
 
 # Apply final transformation to each target point cloud in pcd_pairs
 for i in range(len(merged_point_clouds)):
-    if i % 2 == 0:
+    # if i % 2 == 0:
+    if pcd_directions[i] == "Positive":
         print(f'i: {i}')
         merged_point_clouds[i].transform(final_transformation)
 

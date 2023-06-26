@@ -636,6 +636,9 @@ with h5py.File(f'{local_path}_transformations.h5', 'w') as f:
 
     ns_average_grp = ns_grp.create_group('average')
     ns_average_grp.create_dataset('transformation', data=ns_final_transformation)
+
+subprocess.run(["iput", "-KPVT", f'{local_path}_transformations.h5', dir_path])
+
 # with h5py.File('transformations.h5', 'w') as f:
 #     ew_grp = f.create_group('EW')
 #     ew_individual_grp = ew_grp.create_group('individual')

@@ -1,5 +1,5 @@
 # 3D Transformation selection
-This code allows a user to calculate season-specific transformations for level_0 Scanner3DTop point cloud data. The application is a graphical user interface (GUI) that allows the user to (i) select a season, (ii) select a scan date, (iii) calculate a east-west (EW) transformation, and calculate a north-south (NS) transformation. 
+This code allows a user to calculate season-specific transformations for level_0 Scanner3DTop point cloud data. The application is a graphical user interface (GUI) that allows the user to (i) select a season, (ii) select a scan date, (iii) calculate a east-west (EW) transformation, and calculate a north-south (NS) transformation. The output is a single H5 file containing all calculated transformations.
 
 ## Running the GUI
 The GUI was designed to run on Singularity. To download the container, run the following command:

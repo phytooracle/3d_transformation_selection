@@ -25,18 +25,7 @@ import h5py
 import shutil
 sys.setrecursionlimit(10000) # Set the maximum recursion depth to 10000
 
-root = tk.Tk()
-root.withdraw()
-
-dir_paths = {
-    "Season 10": "/iplant/home/shared/phytooracle/season_10_lettuce_yr_2020/level_0/scanner3DTop/",
-    "Season 11": "/iplant/home/shared/phytooracle/season_11_sorghum_yr_2020/level_0/scanner3DTop/",
-    "Season 12": "/iplant/home/shared/phytooracle/season_12_sorghum_soybean_sunflower_tepary_yr_2021/level_0/scanner3DTop/",
-    "Season 13": "/iplant/home/shared/phytooracle/season_13_lettuce_yr_2022/level_0/scanner3DTop/",
-    "Season 14": "/iplant/home/shared/phytooracle/season_14_sorghum_yr_2022/level_0/scanner3DTop/",
-    "Season 15": "/iplant/home/shared/phytooracle/season_15_lettuce_yr_2022/level_0/scanner3DTop/"
-}
-
+# --------------------------------------------------
 def select_dir_path(dir_paths):
     root = tk.Tk()
     root.withdraw()
@@ -83,13 +72,7 @@ def select_dir_path(dir_paths):
     return selected_dir_path
 
 
-dir_path = select_dir_path(dir_paths)
-
-result = subprocess.run(["ils", dir_path], stdout=subprocess.PIPE)
-output = result.stdout.decode("utf-8")
-
-tar_files = [line.strip() for line in output.split("\n") if line.endswith(".tar.gz")]
-
+# --------------------------------------------------
 def select_tar_file(tar_files):
     root = tk.Tk()
     root.withdraw()
@@ -136,19 +119,7 @@ def select_tar_file(tar_files):
     return selected_tar_file
 
 
-selected_tar_file = select_tar_file(tar_files)
-local_path = selected_tar_file.split(".")[0]
-
-if not os.path.isdir(local_path):
-
-    print(f'Downloading {select_tar_file}.')
-    subprocess.run(["iget", "-PVT", os.path.join(dir_path, selected_tar_file)]) #, local_path])
-    
-    print(f'Extracting at {local_path}.')
-    tar = tarfile.open(selected_tar_file, "r:gz")
-    tar.extractall()
-    tar.close()
-
+# --------------------------------------------------
 def ransac_transform_and_get_inliers(args):
 
     source_down_points = args[0]
@@ -182,6 +153,8 @@ def ransac_transform_and_get_inliers(args):
 
     return tr_x,tr_y,tr_z,number_matched_points
 
+
+# --------------------------------------------------
 def execute_manual_location_based_RANSAC(source_down,target_down,num_samples,voxel_size=1,coefs=[2,1,1,1]):
 
     tr_mean = (0,0,0)
@@ -216,10 +189,14 @@ def execute_manual_location_based_RANSAC(source_down,target_down,num_samples,vox
 
     return (best_x,best_y,best_z)
 
+
+# --------------------------------------------------
 def translate_pcd(pcd,x,y,z):
     transformed_pcd = copy.deepcopy(pcd).translate((x,y,z))
     return transformed_pcd
 
+
+# --------------------------------------------------
 def merge_east_west_ransac(east,west,down_east,down_west):
     tr = execute_manual_location_based_RANSAC(down_east,down_west,400,coefs=[5,5,0.1,0.5])
     
@@ -239,6 +216,7 @@ def merge_east_west_ransac(east,west,down_east,down_west):
     return merged,merged_down,new_east,new_east_down
 
 
+# --------------------------------------------------
 def rotate_pcd(pcd ,rotation_theta=90, center_pcd=None):
 
     theta = np.radians(rotation_theta)
@@ -266,6 +244,8 @@ def rotate_pcd(pcd ,rotation_theta=90, center_pcd=None):
 
     return rotated_pcd
 
+
+# --------------------------------------------------
 def load_metadata_dict(path):
     
     with open(path) as f:
@@ -273,11 +253,192 @@ def load_metadata_dict(path):
 
     return meta
 
+
+# --------------------------------------------------
 def get_direction(x_position: float) -> str:
     if x_position < 216:
         return "south"
     else:
         return "north"
+
+
+# --------------------------------------------------
+def save_transformation(vis, source, target, transformations):
+    trans_init = source.get_rotation_matrix_from_xyz((0, 0, 0)) @ np.linalg.inv(target.get_rotation_matrix_from_xyz((0, 0, 0)))
+    transformations.append(trans_init)
+    vis.clear_geometries()
+    vis.register_animation_callback(None)
+    vis.poll_events()
+    vis.update_renderer()
+    vis.destroy_window()
+    del source
+    del target
+
+
+# --------------------------------------------------
+def update_view(vis, highest_point):
+
+    ctr = vis.get_view_control()
+    ctr.set_lookat(highest_point)
+    return False
+
+
+# --------------------------------------------------
+def update_visualization(vis, source):
+    vis.update_geometry(source)
+    vis.poll_events()
+    vis.update_renderer()
+
+
+# --------------------------------------------------
+def move_left(vis, source, size=1):
+    global cum_trans
+    trans = np.eye(4)
+    trans[0,3] -= size
+    cum_trans = np.dot(trans,cum_trans)
+    source.transform(trans)
+    update_visualization(vis, source)
+
+
+# --------------------------------------------------
+def move_right(vis, source, size=1):
+    global cum_trans
+    trans = np.eye(4)
+    trans[0,3] += size
+    cum_trans = np.dot(trans,cum_trans)
+    source.transform(trans)
+    update_visualization(vis, source)
+
+
+# --------------------------------------------------
+def move_up(vis, source, size=1):
+    global cum_trans
+    trans = np.eye(4)
+    trans[1,3] += size
+    cum_trans = np.dot(trans,cum_trans)
+    source.transform(trans)
+    update_visualization(vis, source)
+
+
+# --------------------------------------------------
+def move_down(vis, source, size=1):
+    global cum_trans
+    trans = np.eye(4)
+    trans[1,3] -= size
+    cum_trans = np.dot(trans,cum_trans)
+    source.transform(trans)
+    update_visualization(vis, source)
+
+
+# --------------------------------------------------
+def move_forward(vis, source, size=1):
+    global cum_trans
+    trans = np.eye(4)
+    trans[2,3] -= size
+    cum_trans = np.dot(trans,cum_trans)
+    source.transform(trans)
+    update_visualization(vis, source)
+
+
+# --------------------------------------------------
+def move_backward(vis, source, size=1):
+    global cum_trans
+    trans = np.eye(4)
+    trans[2,3] += size
+    cum_trans = np.dot(trans,cum_trans)
+    source.transform(trans)
+    update_visualization(vis, source)
+
+
+# --------------------------------------------------
+def next_pair(vis):
+
+    vis.clear_geometries()
+    vis.close()
+
+
+# --------------------------------------------------
+def save_transform_and_move_to_next_pair(vis,cumulative_transform,list_of_transforms, index, i):
+
+    global e_pressed
+    e_pressed = True
+    print('Saving cumulative transformation')
+    list_of_transforms.append(cumulative_transform)
+    print('Saved cumulative transformation')
+    index.append(i)
+
+
+# --------------------------------------------------
+def close_window(vis):
+    if e_pressed:
+        print('Closing window.')
+        # vis.destroy_window()
+        vis.clear_geometries()
+        vis.close()
+        print('Window closed')
+    else:
+        print("Please press 'E' before quitting")
+
+
+# --------------------------------------------------
+def remove_directory(dir_path):
+
+    try:
+        shutil.rmtree(dir_path)
+        print(f'Successfully removed {dir_path}.')
+    except Exception as e:
+        print(f'Error removing {dir_path}: {e}')
+
+
+# --------------------------------------------------
+def remove_file(file_path):
+    try:
+        os.remove(file_path)
+        print(f'Successfully removed {file_path}')
+    except Exception as e:
+        print(f'Error removing {file_path}: {e}')
+
+
+# --------------------------------------------------
+
+# Initialize Tkinter
+root = tk.Tk()
+root.withdraw()
+
+# Define season directory paths
+dir_paths = {
+    "Season 10": "/iplant/home/shared/phytooracle/season_10_lettuce_yr_2020/level_0/scanner3DTop/",
+    "Season 11": "/iplant/home/shared/phytooracle/season_11_sorghum_yr_2020/level_0/scanner3DTop/",
+    "Season 12": "/iplant/home/shared/phytooracle/season_12_sorghum_soybean_sunflower_tepary_yr_2021/level_0/scanner3DTop/",
+    "Season 13": "/iplant/home/shared/phytooracle/season_13_lettuce_yr_2022/level_0/scanner3DTop/",
+    "Season 14": "/iplant/home/shared/phytooracle/season_14_sorghum_yr_2022/level_0/scanner3DTop/",
+    "Season 15": "/iplant/home/shared/phytooracle/season_15_lettuce_yr_2022/level_0/scanner3DTop/"
+}
+
+# Select season
+dir_path = select_dir_path(dir_paths)
+
+# Get list of dates within season directory on CyVerse
+result = subprocess.run(["ils", dir_path], stdout=subprocess.PIPE)
+output = result.stdout.decode("utf-8")
+
+# Get list of all tarballs on CyVerse
+tar_files = [line.strip() for line in output.split("\n") if line.endswith(".tar.gz")]
+
+# Define local path of tarball and extracted contents
+selected_tar_file = select_tar_file(tar_files)
+local_path = selected_tar_file.split(".")[0]
+
+# Download and extract data to local path
+if not os.path.isdir(local_path):
+
+    print(f'Downloading {select_tar_file}.')
+    subprocess.run(["iget", "-PVT", os.path.join(dir_path, selected_tar_file)]) #, local_path])
+    
+    print(f'Extracting at {local_path}.')
+    tar = tarfile.open(selected_tar_file, "r:gz")
+    tar.extractall()
+    tar.close()
 
 # Create an empty list to store each pair of point clouds
 pcd_pairs = []
@@ -374,105 +535,10 @@ for subdir, dirs, files in os.walk(local_path):
         except Exception as e:
             print(f"An error occurred while processing {ply_files[0]} and {ply_files[1]}: {e}")
 
-def save_transformation(vis, source, target, transformations):
-    trans_init = source.get_rotation_matrix_from_xyz((0, 0, 0)) @ np.linalg.inv(target.get_rotation_matrix_from_xyz((0, 0, 0)))
-    transformations.append(trans_init)
-    vis.clear_geometries()
-    vis.register_animation_callback(None)
-    vis.poll_events()
-    vis.update_renderer()
-    vis.destroy_window()
-    del source
-    del target
-
-def update_view(vis, highest_point):
-
-    ctr = vis.get_view_control()
-    ctr.set_lookat(highest_point)
-    return False
-
-def update_visualization(vis, source):
-    vis.update_geometry(source)
-    vis.poll_events()
-    vis.update_renderer()
-
-def move_left(vis, source, size=1):
-    global cum_trans
-    trans = np.eye(4)
-    trans[0,3] -= size
-    cum_trans = np.dot(trans,cum_trans)
-    source.transform(trans)
-    update_visualization(vis, source)
-
-def move_right(vis, source, size=1):
-    global cum_trans
-    trans = np.eye(4)
-    trans[0,3] += size
-    cum_trans = np.dot(trans,cum_trans)
-    source.transform(trans)
-    update_visualization(vis, source)
-
-def move_up(vis, source, size=1):
-    global cum_trans
-    trans = np.eye(4)
-    trans[1,3] += size
-    cum_trans = np.dot(trans,cum_trans)
-    source.transform(trans)
-    update_visualization(vis, source)
-
-def move_down(vis, source, size=1):
-    global cum_trans
-    trans = np.eye(4)
-    trans[1,3] -= size
-    cum_trans = np.dot(trans,cum_trans)
-    source.transform(trans)
-    update_visualization(vis, source)
-
-def move_forward(vis, source, size=1):
-    global cum_trans
-    trans = np.eye(4)
-    trans[2,3] -= size
-    cum_trans = np.dot(trans,cum_trans)
-    source.transform(trans)
-    update_visualization(vis, source)
-
-def move_backward(vis, source, size=1):
-    global cum_trans
-    trans = np.eye(4)
-    trans[2,3] += size
-    cum_trans = np.dot(trans,cum_trans)
-    source.transform(trans)
-    update_visualization(vis, source)
-
-def next_pair(vis):
-    # Stop the visualization
-    # vis.register_animation_callback(None)
-    # vis.poll_events()
-    # vis.update_renderer()
-    # vis.destroy_window()
-    vis.clear_geometries()
-    vis.close()
-
-def save_transform_and_move_to_next_pair(vis,cumulative_transform,list_of_transforms, index, i):
-    global e_pressed
-    e_pressed = True
-    print('Saving cumulative transformation')
-    list_of_transforms.append(cumulative_transform)
-    print('Saved cumulative transformation')
-    index.append(i)
-    
-def close_window(vis):
-    if e_pressed:
-        print('Closing window.')
-        # vis.destroy_window()
-        vis.clear_geometries()
-        vis.close()
-        print('Window closed')
-    else:
-        print("Please press 'E' before quitting")
-
+# Define the output directory
 out_dir = os.path.join('scanner3DTop_Transformations', local_path)
 
+# Create output directory
 if not os.path.isdir(out_dir):
     os.makedirs(out_dir)
 
@@ -613,7 +679,6 @@ np.save(os.path.join(out_dir, f'{local_path}_ns_final_transformation.npy'), ns_f
 
 # Apply final transformation to each target point cloud in pcd_pairs
 for i in range(len(merged_point_clouds)):
-    # if i % 2 == 0:
     if pcd_directions[i] == "Positive":
         print(f'i: {i}')
         merged_point_clouds[i].transform(ns_final_transformation)
@@ -621,8 +686,10 @@ for i in range(len(merged_point_clouds)):
 # Visualize all merged point clouds in a single visualization
 o3d.visualization.draw_geometries(merged_point_clouds, window_name='Final transformation')
 
+# Clean memory
 del merged_point_clouds
 
+# Create H5 file with average and individual transformations
 with h5py.File(os.path.join(out_dir, f'{local_path}_transformations.h5'), 'w') as f:
     ew_grp = f.create_group('EW')
     ew_individual_grp = ew_grp.create_group('individual')
@@ -650,48 +717,13 @@ with h5py.File(os.path.join(out_dir, f'{local_path}_transformations.h5'), 'w') a
     ns_average_grp = ns_grp.create_group('average')
     ns_average_grp.create_dataset('transformation', data=ns_final_transformation)
 
+# Define CyVerse output directory
 cyverse_out_path = os.path.join(dir_path, 'scanner3DTop_Transformations')
 
+# Upload data to CyVerse
 subprocess.run(f"imkdir -p {cyverse_out_path} && icd {cyverse_out_path} && iput -rfKPVT {out_dir}", shell=True)
 
-def remove_directory(dir_path):
-
-    try:
-        shutil.rmtree(dir_path)
-        print(f'Successfully removed {dir_path}.')
-    except Exception as e:
-        print(f'Error removing {dir_path}: {e}')
-
-def remove_file(file_path):
-    try:
-        os.remove(file_path)
-        print(f'Successfully removed {file_path}')
-    except Exception as e:
-        print(f'Error removing {file_path}: {e}')
-
+# Clean working directory
 remove_directory(dir_path='scanner3DTop_Transformations')
 remove_directory(dir_path=local_path)
 remove_file(file_path=selected_tar_file)
-
-# with h5py.File('transformations.h5', 'w') as f:
-#     ew_grp = f.create_group('EW')
-#     ew_individual_grp = ew_grp.create_group('individual')
-#     for i, transformation in enumerate(ew_final_transformations):
-#         ew_individual_grp.create_dataset(f'transformation_{i}', data=transformation)
-#     ew_individual_grp.create_dataset('fields', data=fields)
-#     ew_individual_grp.create_dataset('z_positions', data=z_positions)
-#     ew_individual_grp.create_dataset('filenames', data=filenames, dtype=h5py.special_dtype(vlen=str))
-    
-#     ew_average_grp = ew_grp.create_group('average')
-#     ew_average_grp.create_dataset('transformation', data=ew_final_transformation)
-    
-#     ns_grp = f.create_group('NS')
-#     ns_individual_grp = ns_grp.create_group('individual')
-#     for i, transformation in enumerate(ns_final_transformations):
-#         ns_individual_grp.create_dataset(f'transformation_{i}', data=transformation)
-#     ns_individual_grp.create_dataset('fields', data=fields)
-#     ns_individual_grp.create_dataset('z_positions', data=z_positions)
-#     ns_individual_grp.create_dataset('filenames', data=filenames, dtype=h5py.special_dtype(vlen=str))
-    
-#     ns_average_grp = ns_grp.create_group('average')
-#     ns_average_grp.create_dataset('transformation', data=ns_final_transformation)

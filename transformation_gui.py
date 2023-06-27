@@ -22,6 +22,7 @@ import multiprocessing
 import json
 from open3d.visualization.gui import Application
 import h5py
+import shutil
 sys.setrecursionlimit(10000) # Set the maximum recursion depth to 10000
 
 root = tk.Tk()
@@ -333,7 +334,7 @@ for subdir, dirs, files in os.walk(local_path):
             metadata = load_metadata_dict(meta_path)
 
             # Get filename
-            filename = ''.join([subdir, item.split('__')[0]])
+            filename = '/'.join([os.path.basename(subdir), item.split('__')[0]])
 
             # Get field location
             x_position = float(metadata['gantry_system_variable_metadata']['position x [m]'])
@@ -452,12 +453,13 @@ def next_pair(vis):
     vis.clear_geometries()
     vis.close()
 
-def save_transform_and_move_to_next_pair(vis,cumulative_transform,list_of_transforms):
+def save_transform_and_move_to_next_pair(vis,cumulative_transform,list_of_transforms, index, i):
     global e_pressed
     e_pressed = True
     print('Saving cumulative transformation')
     list_of_transforms.append(cumulative_transform)
     print('Saved cumulative transformation')
+    index.append(i)
     
 def close_window(vis):
     if e_pressed:
@@ -469,8 +471,14 @@ def close_window(vis):
     else:
         print("Please press 'E' before quitting")
 
+out_dir = os.path.join('scanner3DTop_Transformations', local_path)
+
+if not os.path.isdir(out_dir):
+    os.makedirs(out_dir)
+
 # Step 1: Align the point clouds within each pair (EW)
 ew_final_transformations = []
+ew_index = []
 for i, (source, target) in enumerate(pcd_pairs):
     
     e_pressed = False
@@ -509,7 +517,7 @@ for i, (source, target) in enumerate(pcd_pairs):
     vis.register_key_callback(ord("R"), lambda vis: move_forward(vis, source_copy, size=5))
     vis.register_key_callback(ord("F"), lambda vis: move_backward(vis, source_copy, size=5))
     vis.register_key_callback(ord("I"), lambda vis: next_pair(vis))
-    vis.register_key_callback(ord("E"), lambda vis: save_transform_and_move_to_next_pair(vis,cum_trans,ew_final_transformations))
+    vis.register_key_callback(ord("E"), lambda vis: save_transform_and_move_to_next_pair(vis,cum_trans,ew_final_transformations, ew_index, i))
     vis.register_key_callback(ord("Q"), close_window)
 
     # Run and destroy the visualization
@@ -522,7 +530,7 @@ for i, (source, target) in enumerate(pcd_pairs):
 
 # Calculate the final transformation based on all transformations
 ew_final_transformation = np.mean(ew_final_transformations,axis=0)
-np.save('ew_final_transformation.npy', ew_final_transformation)
+np.save(os.path.join(out_dir, f'{local_path}_ew_final_transformation.npy'), ew_final_transformation)
 
 # Apply final transformation to each source point cloud in pcd_pairs
 for i, (source, target) in enumerate(pcd_pairs):
@@ -552,6 +560,7 @@ for i in range(len(pcd_pairs)):
 del pcd_pairs
 
 ns_final_transformations = []
+ns_index = []
 for i in range(len(merged_point_clouds)-1):
     if pcd_directions[i] == "Positive":
         e_pressed = False
@@ -590,7 +599,7 @@ for i in range(len(merged_point_clouds)-1):
         vis.register_key_callback(ord("R"), lambda vis: move_forward(vis, source_copy, size=20))
         vis.register_key_callback(ord("F"), lambda vis: move_backward(vis, source_copy, size=20))
         vis.register_key_callback(ord("I"), lambda vis: next_pair(vis))
-        vis.register_key_callback(ord("E"), lambda vis: save_transform_and_move_to_next_pair(vis,cum_trans,ns_final_transformations))
+        vis.register_key_callback(ord("E"), lambda vis: save_transform_and_move_to_next_pair(vis,cum_trans,ns_final_transformations, ns_index, i))
         vis.register_key_callback(ord("Q"), close_window)
 
         # Run and destroy the visualization
@@ -600,7 +609,7 @@ for i in range(len(merged_point_clouds)-1):
 
 # Calculate the final transformation based on all transformations
 ns_final_transformation = np.mean(ns_final_transformations,axis=0)
-np.save('ns_final_transformation.npy', ns_final_transformation)
+np.save(os.path.join(out_dir, f'{local_path}_ns_final_transformation.npy'), ns_final_transformation)
 
 # Apply final transformation to each target point cloud in pcd_pairs
 for i in range(len(merged_point_clouds)):
@@ -614,11 +623,13 @@ o3d.visualization.draw_geometries(merged_point_clouds, window_name='Final transf
 
 del merged_point_clouds
 
-with h5py.File(f'{local_path}_transformations.h5', 'w') as f:
+with h5py.File(os.path.join(out_dir, f'{local_path}_transformations.h5'), 'w') as f:
     ew_grp = f.create_group('EW')
     ew_individual_grp = ew_grp.create_group('individual')
+    ew_trans = ew_individual_grp.create_group('transformations')
     for i, transformation in enumerate(ew_final_transformations):
-        ew_individual_grp.create_dataset(f'transformation_{i}', data=transformation)
+        ew_idx = ew_index[i]
+        ew_trans.create_dataset(filenames[ew_idx], data=transformation) #.split('/')[1]
     ew_individual_grp.create_dataset('fields', data=fields)
     ew_individual_grp.create_dataset('z_positions', data=z_positions)
     ew_individual_grp.create_dataset('filenames', data=filenames, dtype=h5py.special_dtype(vlen=str))
@@ -628,8 +639,10 @@ with h5py.File(f'{local_path}_transformations.h5', 'w') as f:
     
     ns_grp = f.create_group('NS')
     ns_individual_grp = ns_grp.create_group('individual')
+    ns_trans = ns_individual_grp.create_group('transformations')
     for i, transformation in enumerate(ns_final_transformations):
-        ns_individual_grp.create_dataset(f'transformation_{i}', data=transformation)
+        ns_idx = ns_index[i]
+        ns_trans.create_dataset(filenames[ns_idx], data=transformation) #.split('/')[1]
     ns_individual_grp.create_dataset('fields', data=fields)
     ns_individual_grp.create_dataset('z_positions', data=z_positions)
     ns_individual_grp.create_dataset('filenames', data=filenames, dtype=h5py.special_dtype(vlen=str))
@@ -637,7 +650,28 @@ with h5py.File(f'{local_path}_transformations.h5', 'w') as f:
     ns_average_grp = ns_grp.create_group('average')
     ns_average_grp.create_dataset('transformation', data=ns_final_transformation)
 
-subprocess.run(["iput", "-KPVT", f'{local_path}_transformations.h5', dir_path])
+cyverse_out_path = os.path.join(dir_path, 'scanner3DTop_Transformations')
+
+subprocess.run(f"imkdir -p {cyverse_out_path} && icd {cyverse_out_path} && iput -rfKPVT {out_dir}", shell=True)
+
+def remove_directory(dir_path):
+
+    try:
+        shutil.rmtree(dir_path)
+        print(f'Successfully removed {dir_path}.')
+    except Exception as e:
+        print(f'Error removing {dir_path}: {e}')
+
+def remove_file(file_path):
+    try:
+        os.remove(file_path)
+        print(f'Successfully removed {file_path}')
+    except Exception as e:
+        print(f'Error removing {file_path}: {e}')
+
+remove_directory(dir_path='scanner3DTop_Transformations')
+remove_directory(dir_path=local_path)
+remove_file(file_path=selected_tar_file)
 
 # with h5py.File('transformations.h5', 'w') as f:
 #     ew_grp = f.create_group('EW')

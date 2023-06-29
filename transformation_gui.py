@@ -543,7 +543,9 @@ if not os.path.isdir(out_dir):
     os.makedirs(out_dir)
 
 # Step 1: Align the point clouds within each pair (EW)
-ew_final_transformations = []
+# ew_final_transformations = []
+ew_positive_final_transformations = []
+ew_negative_final_transformations = []
 ew_index = []
 for i, (source, target) in enumerate(pcd_pairs):
     
@@ -583,7 +585,12 @@ for i, (source, target) in enumerate(pcd_pairs):
     vis.register_key_callback(ord("R"), lambda vis: move_forward(vis, source_copy, size=5))
     vis.register_key_callback(ord("F"), lambda vis: move_backward(vis, source_copy, size=5))
     vis.register_key_callback(ord("I"), lambda vis: next_pair(vis))
-    vis.register_key_callback(ord("E"), lambda vis: save_transform_and_move_to_next_pair(vis,cum_trans,ew_final_transformations, ew_index, i))
+    
+    if pcd_directions[i] == "Positive":
+        vis.register_key_callback(ord("E"), lambda vis: save_transform_and_move_to_next_pair(vis,cum_trans,ew_positive_final_transformations, ew_index, i))
+    else:
+        vis.register_key_callback(ord("E"), lambda vis: save_transform_and_move_to_next_pair(vis,cum_trans,ew_negative_final_transformations, ew_index, i))
+
     vis.register_key_callback(ord("Q"), close_window)
 
     # Run and destroy the visualization
@@ -593,14 +600,23 @@ for i, (source, target) in enumerate(pcd_pairs):
 
     # Delete or reassign variables that are no longer needed
     del source_copy
+print(ew_negative_final_transformations)
+print(ew_positive_final_transformations)
+# Calculate the negative final transformation based on all transformations
+ew_negative_final_transformation = np.mean(ew_negative_final_transformations,axis=0)
+np.save(os.path.join(out_dir, f'{local_path}_ew_negative_final_transformation.npy'), ew_negative_final_transformation)
 
-# Calculate the final transformation based on all transformations
-ew_final_transformation = np.mean(ew_final_transformations,axis=0)
-np.save(os.path.join(out_dir, f'{local_path}_ew_final_transformation.npy'), ew_final_transformation)
+# Calculate the positive final transformation based on all transformations
+ew_positive_final_transformation = np.mean(ew_positive_final_transformations,axis=0)
+np.save(os.path.join(out_dir, f'{local_path}_ew_positive_final_transformation.npy'), ew_positive_final_transformation)
 
 # Apply final transformation to each source point cloud in pcd_pairs
 for i, (source, target) in enumerate(pcd_pairs):
-    source.transform(ew_final_transformation)
+
+    if pcd_directions[i] == "Positive":
+        source.transform(ew_positive_final_transformation)
+    else:
+        source.transform(ew_negative_final_transformation)
 
 # Create a list of all point clouds
 all_point_clouds = []
@@ -694,15 +710,26 @@ with h5py.File(os.path.join(out_dir, f'{local_path}_transformations.h5'), 'w') a
     ew_grp = f.create_group('EW')
     ew_individual_grp = ew_grp.create_group('individual')
     ew_trans = ew_individual_grp.create_group('transformations')
-    for i, transformation in enumerate(ew_final_transformations):
+
+    ew_positive_trans = ew_trans.create_group('positive')
+    for i, transformation in enumerate(ew_positive_final_transformations):
         ew_idx = ew_index[i]
-        ew_trans.create_dataset(filenames[ew_idx], data=transformation) #.split('/')[1]
+        ew_positive_trans.create_dataset(filenames[ew_idx], data=transformation) #.split('/')[1]
+
+    ew_negative_trans = ew_trans.create_group('negative')
+    for i, transformation in enumerate(ew_negative_final_transformations):
+        ew_idx = ew_index[i]
+        ew_negative_trans.create_dataset(filenames[ew_idx], data=transformation) #.split('/')[1]
+
     ew_individual_grp.create_dataset('fields', data=fields)
     ew_individual_grp.create_dataset('z_positions', data=z_positions)
     ew_individual_grp.create_dataset('filenames', data=filenames, dtype=h5py.special_dtype(vlen=str))
     
     ew_average_grp = ew_grp.create_group('average')
-    ew_average_grp.create_dataset('transformation', data=ew_final_transformation)
+    ew_negative_average_grp = ew_average_grp.create_group('negative')
+    ew_positive_average_grp = ew_average_grp.create_group('positive')
+    ew_negative_average_grp.create_dataset('transformation', data=ew_negative_final_transformation)
+    ew_positive_average_grp.create_dataset('transformation', data=ew_positive_final_transformation)
     
     ns_grp = f.create_group('NS')
     ns_individual_grp = ns_grp.create_group('individual')

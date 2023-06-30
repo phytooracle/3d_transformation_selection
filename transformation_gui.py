@@ -23,6 +23,8 @@ import json
 from open3d.visualization.gui import Application
 import h5py
 import shutil
+import matplotlib.pyplot as plt
+
 sys.setrecursionlimit(10000) # Set the maximum recursion depth to 10000
 
 # --------------------------------------------------
@@ -407,7 +409,20 @@ def remove_file(file_path):
 
 
 # --------------------------------------------------
+def colorize_point_cloud(pcd, cmap):
 
+    # Get the points as a numpy array
+    points = np.asarray(pcd.points)
+
+    # Calculate the colors based on the z values of the points
+    colors = (points[:, 2] - np.min(points[:, 2])) / (np.max(points[:, 2]) - np.min(points[:, 2]))
+    colors = plt.get_cmap(cmap)(colors)[:, :3]
+
+    # Set the colors of the point cloud
+    pcd.colors = o3d.utility.Vector3dVector(colors)
+
+
+# --------------------------------------------------
 # Initialize Tkinter
 root = tk.Tk()
 root.withdraw()
@@ -563,9 +578,12 @@ for i, (source, target) in enumerate(pcd_pairs):
     
     # Paint the point clouds for visualization
     print('Preparing point cloud pair')
-    source.paint_uniform_color([1, 0.706, 0])
-    source_copy.paint_uniform_color([1, 0.706, 0])
-    target.paint_uniform_color([0, 0.651, 0.929])  
+    colorize_point_cloud(source, "viridis")
+    colorize_point_cloud(source_copy, "viridis")
+    colorize_point_cloud(target, "plasma")
+    # source.paint_uniform_color([1, 0.706, 0])
+    # source_copy.paint_uniform_color([1, 0.706, 0])
+    # target.paint_uniform_color([0, 0.651, 0.929])  
 
     # Set up the visualization
     print("Press 'W', 'A', 'S', 'D', 'R', or 'F' to move the source point cloud")
@@ -659,9 +677,12 @@ for i in range(len(merged_point_clouds)-1):
 
         # Paint the point clouds for visualization
         print('Preparing point cloud pair')
-        source.paint_uniform_color([1, 0.706, 0])
-        source_copy.paint_uniform_color([1, 0.706, 0])
-        target.paint_uniform_color([0, 0.651, 0.929])  
+        colorize_point_cloud(source, "viridis")
+        colorize_point_cloud(source_copy, "viridis")
+        colorize_point_cloud(target, "plasma")
+        # source.paint_uniform_color([1, 0.706, 0])
+        # source_copy.paint_uniform_color([1, 0.706, 0])
+        # target.paint_uniform_color([0, 0.651, 0.929])  
         
         # Set up the visualization
         print("Press 'W', 'A', 'S', 'D', 'R', or 'F' to move the source point cloud")

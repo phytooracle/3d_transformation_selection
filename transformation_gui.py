@@ -701,12 +701,12 @@ for i in range(len(merged_point_clouds)-1):
         cum_trans = np.eye(4)
 
         # Register key callbacks to move point cloud along the x-axis
-        vis.register_key_callback(ord("W"), lambda vis: move_up(vis, source_copy, size=40))
-        vis.register_key_callback(ord("A"), lambda vis: move_left(vis, source_copy, size=40))
-        vis.register_key_callback(ord("S"), lambda vis: move_down(vis, source_copy, size=40))
-        vis.register_key_callback(ord("D"), lambda vis: move_right(vis, source_copy, size=40))
-        vis.register_key_callback(ord("R"), lambda vis: move_forward(vis, source_copy, size=40))
-        vis.register_key_callback(ord("F"), lambda vis: move_backward(vis, source_copy, size=40))
+        vis.register_key_callback(ord("W"), lambda vis: move_up(vis, source_copy, size=30))
+        vis.register_key_callback(ord("A"), lambda vis: move_left(vis, source_copy, size=30))
+        vis.register_key_callback(ord("S"), lambda vis: move_down(vis, source_copy, size=30))
+        vis.register_key_callback(ord("D"), lambda vis: move_right(vis, source_copy, size=30))
+        vis.register_key_callback(ord("R"), lambda vis: move_forward(vis, source_copy, size=30))
+        vis.register_key_callback(ord("F"), lambda vis: move_backward(vis, source_copy, size=30))
         vis.register_key_callback(ord("I"), lambda vis: next_pair(vis))
         vis.register_key_callback(ord("E"), lambda vis: save_transform_and_move_to_next_pair(vis,cum_trans,ns_final_transformations, ns_index, i))
         vis.register_key_callback(ord("Q"), close_window)

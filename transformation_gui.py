@@ -23,6 +23,8 @@ import json
 from open3d.visualization.gui import Application
 import h5py
 import shutil
+import matplotlib.pyplot as plt
+
 sys.setrecursionlimit(10000) # Set the maximum recursion depth to 10000
 
 # --------------------------------------------------
@@ -298,6 +300,7 @@ def move_left(vis, source, size=1):
     cum_trans = np.dot(trans,cum_trans)
     source.transform(trans)
     update_visualization(vis, source)
+    print(cum_trans)
 
 
 # --------------------------------------------------
@@ -308,6 +311,7 @@ def move_right(vis, source, size=1):
     cum_trans = np.dot(trans,cum_trans)
     source.transform(trans)
     update_visualization(vis, source)
+    print(cum_trans)
 
 
 # --------------------------------------------------
@@ -318,6 +322,7 @@ def move_up(vis, source, size=1):
     cum_trans = np.dot(trans,cum_trans)
     source.transform(trans)
     update_visualization(vis, source)
+    print(cum_trans)
 
 
 # --------------------------------------------------
@@ -328,6 +333,7 @@ def move_down(vis, source, size=1):
     cum_trans = np.dot(trans,cum_trans)
     source.transform(trans)
     update_visualization(vis, source)
+    print(cum_trans)
 
 
 # --------------------------------------------------
@@ -338,6 +344,7 @@ def move_forward(vis, source, size=1):
     cum_trans = np.dot(trans,cum_trans)
     source.transform(trans)
     update_visualization(vis, source)
+    print(cum_trans)
 
 
 # --------------------------------------------------
@@ -348,6 +355,7 @@ def move_backward(vis, source, size=1):
     cum_trans = np.dot(trans,cum_trans)
     source.transform(trans)
     update_visualization(vis, source)
+    print(cum_trans)
 
 
 # --------------------------------------------------
@@ -362,10 +370,11 @@ def save_transform_and_move_to_next_pair(vis,cumulative_transform,list_of_transf
 
     global e_pressed
     e_pressed = True
-    print('Saving cumulative transformation')
+    print(f'Saving cumulative transformation\n{cumulative_transform}')
     list_of_transforms.append(cumulative_transform)
     print('Saved cumulative transformation')
     index.append(i)
+    next_pair(vis)
 
 
 # --------------------------------------------------
@@ -400,7 +409,20 @@ def remove_file(file_path):
 
 
 # --------------------------------------------------
+def colorize_point_cloud(pcd, cmap):
 
+    # Get the points as a numpy array
+    points = np.asarray(pcd.points)
+
+    # Calculate the colors based on the z values of the points
+    colors = (points[:, 2] - np.min(points[:, 2])) / (np.max(points[:, 2]) - np.min(points[:, 2]))
+    colors = plt.get_cmap(cmap)(colors)[:, :3]
+
+    # Set the colors of the point cloud
+    pcd.colors = o3d.utility.Vector3dVector(colors)
+
+
+# --------------------------------------------------
 # Initialize Tkinter
 root = tk.Tk()
 root.withdraw()
@@ -543,7 +565,9 @@ if not os.path.isdir(out_dir):
     os.makedirs(out_dir)
 
 # Step 1: Align the point clouds within each pair (EW)
-ew_final_transformations = []
+# ew_final_transformations = []
+ew_positive_final_transformations = []
+ew_negative_final_transformations = []
 ew_index = []
 for i, (source, target) in enumerate(pcd_pairs):
     
@@ -554,9 +578,12 @@ for i, (source, target) in enumerate(pcd_pairs):
     
     # Paint the point clouds for visualization
     print('Preparing point cloud pair')
-    source.paint_uniform_color([1, 0.706, 0])
-    source_copy.paint_uniform_color([1, 0.706, 0])
-    target.paint_uniform_color([0, 0.651, 0.929])  
+    colorize_point_cloud(source, "viridis")
+    colorize_point_cloud(source_copy, "viridis")
+    colorize_point_cloud(target, "plasma")
+    # source.paint_uniform_color([1, 0.706, 0])
+    # source_copy.paint_uniform_color([1, 0.706, 0])
+    # target.paint_uniform_color([0, 0.651, 0.929])  
 
     # Set up the visualization
     print("Press 'W', 'A', 'S', 'D', 'R', or 'F' to move the source point cloud")
@@ -566,7 +593,7 @@ for i, (source, target) in enumerate(pcd_pairs):
 
     vis = o3d.visualization.VisualizerWithKeyCallback()
     vis.create_window()
-    vis.toggle_full_screen()
+    # vis.toggle_full_screen()
     # Application.instance.run()
 
     # Add point clouds
@@ -583,7 +610,12 @@ for i, (source, target) in enumerate(pcd_pairs):
     vis.register_key_callback(ord("R"), lambda vis: move_forward(vis, source_copy, size=5))
     vis.register_key_callback(ord("F"), lambda vis: move_backward(vis, source_copy, size=5))
     vis.register_key_callback(ord("I"), lambda vis: next_pair(vis))
-    vis.register_key_callback(ord("E"), lambda vis: save_transform_and_move_to_next_pair(vis,cum_trans,ew_final_transformations, ew_index, i))
+    
+    if pcd_directions[i] == "Positive":
+        vis.register_key_callback(ord("E"), lambda vis: save_transform_and_move_to_next_pair(vis,cum_trans,ew_positive_final_transformations, ew_index, i))
+    else:
+        vis.register_key_callback(ord("E"), lambda vis: save_transform_and_move_to_next_pair(vis,cum_trans,ew_negative_final_transformations, ew_index, i))
+
     vis.register_key_callback(ord("Q"), close_window)
 
     # Run and destroy the visualization
@@ -594,13 +626,21 @@ for i, (source, target) in enumerate(pcd_pairs):
     # Delete or reassign variables that are no longer needed
     del source_copy
 
-# Calculate the final transformation based on all transformations
-ew_final_transformation = np.mean(ew_final_transformations,axis=0)
-np.save(os.path.join(out_dir, f'{local_path}_ew_final_transformation.npy'), ew_final_transformation)
+# Calculate the negative final transformation based on all transformations
+ew_negative_final_transformation = np.mean(ew_negative_final_transformations,axis=0)
+np.save(os.path.join(out_dir, f'{local_path}_ew_negative_final_transformation.npy'), ew_negative_final_transformation)
+
+# Calculate the positive final transformation based on all transformations
+ew_positive_final_transformation = np.mean(ew_positive_final_transformations,axis=0)
+np.save(os.path.join(out_dir, f'{local_path}_ew_positive_final_transformation.npy'), ew_positive_final_transformation)
 
 # Apply final transformation to each source point cloud in pcd_pairs
 for i, (source, target) in enumerate(pcd_pairs):
-    source.transform(ew_final_transformation)
+
+    if pcd_directions[i] == "Positive":
+        source.transform(ew_positive_final_transformation)
+    else:
+        source.transform(ew_negative_final_transformation)
 
 # Create a list of all point clouds
 all_point_clouds = []
@@ -637,9 +677,12 @@ for i in range(len(merged_point_clouds)-1):
 
         # Paint the point clouds for visualization
         print('Preparing point cloud pair')
-        source.paint_uniform_color([1, 0.706, 0])
-        source_copy.paint_uniform_color([1, 0.706, 0])
-        target.paint_uniform_color([0, 0.651, 0.929])  
+        colorize_point_cloud(source, "viridis")
+        colorize_point_cloud(source_copy, "viridis")
+        colorize_point_cloud(target, "plasma")
+        # source.paint_uniform_color([1, 0.706, 0])
+        # source_copy.paint_uniform_color([1, 0.706, 0])
+        # target.paint_uniform_color([0, 0.651, 0.929])  
         
         # Set up the visualization
         print("Press 'W', 'A', 'S', 'D', 'R', or 'F' to move the source point cloud")
@@ -649,7 +692,7 @@ for i in range(len(merged_point_clouds)-1):
 
         vis = o3d.visualization.VisualizerWithKeyCallback()
         vis.create_window()
-        vis.toggle_full_screen()
+        # vis.toggle_full_screen()
 
         # Add point clouds
         vis.add_geometry(source_copy)
@@ -658,12 +701,12 @@ for i in range(len(merged_point_clouds)-1):
         cum_trans = np.eye(4)
 
         # Register key callbacks to move point cloud along the x-axis
-        vis.register_key_callback(ord("W"), lambda vis: move_up(vis, source_copy, size=20))
-        vis.register_key_callback(ord("A"), lambda vis: move_left(vis, source_copy, size=20))
-        vis.register_key_callback(ord("S"), lambda vis: move_down(vis, source_copy, size=20))
-        vis.register_key_callback(ord("D"), lambda vis: move_right(vis, source_copy, size=20))
-        vis.register_key_callback(ord("R"), lambda vis: move_forward(vis, source_copy, size=20))
-        vis.register_key_callback(ord("F"), lambda vis: move_backward(vis, source_copy, size=20))
+        vis.register_key_callback(ord("W"), lambda vis: move_up(vis, source_copy, size=30))
+        vis.register_key_callback(ord("A"), lambda vis: move_left(vis, source_copy, size=30))
+        vis.register_key_callback(ord("S"), lambda vis: move_down(vis, source_copy, size=30))
+        vis.register_key_callback(ord("D"), lambda vis: move_right(vis, source_copy, size=30))
+        vis.register_key_callback(ord("R"), lambda vis: move_forward(vis, source_copy, size=30))
+        vis.register_key_callback(ord("F"), lambda vis: move_backward(vis, source_copy, size=30))
         vis.register_key_callback(ord("I"), lambda vis: next_pair(vis))
         vis.register_key_callback(ord("E"), lambda vis: save_transform_and_move_to_next_pair(vis,cum_trans,ns_final_transformations, ns_index, i))
         vis.register_key_callback(ord("Q"), close_window)
@@ -680,7 +723,7 @@ np.save(os.path.join(out_dir, f'{local_path}_ns_final_transformation.npy'), ns_f
 # Apply final transformation to each target point cloud in pcd_pairs
 for i in range(len(merged_point_clouds)):
     if pcd_directions[i] == "Positive":
-        print(f'i: {i}')
+        # print(f'i: {i}')
         merged_point_clouds[i].transform(ns_final_transformation)
 
 # Visualize all merged point clouds in a single visualization
@@ -694,15 +737,26 @@ with h5py.File(os.path.join(out_dir, f'{local_path}_transformations.h5'), 'w') a
     ew_grp = f.create_group('EW')
     ew_individual_grp = ew_grp.create_group('individual')
     ew_trans = ew_individual_grp.create_group('transformations')
-    for i, transformation in enumerate(ew_final_transformations):
+
+    ew_positive_trans = ew_trans.create_group('positive')
+    for i, transformation in enumerate(ew_positive_final_transformations):
         ew_idx = ew_index[i]
-        ew_trans.create_dataset(filenames[ew_idx], data=transformation) #.split('/')[1]
+        ew_positive_trans.create_dataset(filenames[ew_idx], data=transformation) #.split('/')[1]
+
+    ew_negative_trans = ew_trans.create_group('negative')
+    for i, transformation in enumerate(ew_negative_final_transformations):
+        ew_idx = ew_index[i]
+        ew_negative_trans.create_dataset(filenames[ew_idx], data=transformation) #.split('/')[1]
+
     ew_individual_grp.create_dataset('fields', data=fields)
     ew_individual_grp.create_dataset('z_positions', data=z_positions)
     ew_individual_grp.create_dataset('filenames', data=filenames, dtype=h5py.special_dtype(vlen=str))
     
     ew_average_grp = ew_grp.create_group('average')
-    ew_average_grp.create_dataset('transformation', data=ew_final_transformation)
+    ew_negative_average_grp = ew_average_grp.create_group('negative')
+    ew_positive_average_grp = ew_average_grp.create_group('positive')
+    ew_negative_average_grp.create_dataset('transformation', data=ew_negative_final_transformation)
+    ew_positive_average_grp.create_dataset('transformation', data=ew_positive_final_transformation)
     
     ns_grp = f.create_group('NS')
     ns_individual_grp = ns_grp.create_group('individual')

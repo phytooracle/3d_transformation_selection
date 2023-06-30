@@ -24,6 +24,7 @@ from open3d.visualization.gui import Application
 import h5py
 import shutil
 import matplotlib.pyplot as plt
+import re
 
 sys.setrecursionlimit(10000) # Set the maximum recursion depth to 10000
 
@@ -423,6 +424,15 @@ def colorize_point_cloud(pcd, cmap):
 
 
 # --------------------------------------------------
+def extract_date(string: str) -> str:
+    match = re.search(r'\d{4}-\d{2}-\d{2}', string)
+    if match:
+        return match.group()
+    else:
+        return "No date found in the string"
+
+        
+# --------------------------------------------------
 # Initialize Tkinter
 root = tk.Tk()
 root.withdraw()
@@ -558,7 +568,8 @@ for subdir, dirs, files in os.walk(local_path):
             print(f"An error occurred while processing {ply_files[0]} and {ply_files[1]}: {e}")
 
 # Define the output directory
-out_dir = os.path.join('scanner3DTop_Transformations', local_path)
+local_path_date = extract_date(string=local_path)
+out_dir = os.path.join('scanner3DTop_Transformations', local_path_date)
 
 # Create output directory
 if not os.path.isdir(out_dir):
@@ -628,11 +639,11 @@ for i, (source, target) in enumerate(pcd_pairs):
 
 # Calculate the negative final transformation based on all transformations
 ew_negative_final_transformation = np.mean(ew_negative_final_transformations,axis=0)
-np.save(os.path.join(out_dir, f'{local_path}_ew_negative_final_transformation.npy'), ew_negative_final_transformation)
+np.save(os.path.join(out_dir, f'{local_path_date}_ew_negative_final_transformation.npy'), ew_negative_final_transformation)
 
 # Calculate the positive final transformation based on all transformations
 ew_positive_final_transformation = np.mean(ew_positive_final_transformations,axis=0)
-np.save(os.path.join(out_dir, f'{local_path}_ew_positive_final_transformation.npy'), ew_positive_final_transformation)
+np.save(os.path.join(out_dir, f'{local_path_date}_ew_positive_final_transformation.npy'), ew_positive_final_transformation)
 
 # Apply final transformation to each source point cloud in pcd_pairs
 for i, (source, target) in enumerate(pcd_pairs):
@@ -701,12 +712,12 @@ for i in range(len(merged_point_clouds)-1):
         cum_trans = np.eye(4)
 
         # Register key callbacks to move point cloud along the x-axis
-        vis.register_key_callback(ord("W"), lambda vis: move_up(vis, source_copy, size=30))
-        vis.register_key_callback(ord("A"), lambda vis: move_left(vis, source_copy, size=30))
-        vis.register_key_callback(ord("S"), lambda vis: move_down(vis, source_copy, size=30))
-        vis.register_key_callback(ord("D"), lambda vis: move_right(vis, source_copy, size=30))
-        vis.register_key_callback(ord("R"), lambda vis: move_forward(vis, source_copy, size=30))
-        vis.register_key_callback(ord("F"), lambda vis: move_backward(vis, source_copy, size=30))
+        vis.register_key_callback(ord("W"), lambda vis: move_up(vis, source_copy, size=20))
+        vis.register_key_callback(ord("A"), lambda vis: move_left(vis, source_copy, size=20))
+        vis.register_key_callback(ord("S"), lambda vis: move_down(vis, source_copy, size=20))
+        vis.register_key_callback(ord("D"), lambda vis: move_right(vis, source_copy, size=20))
+        vis.register_key_callback(ord("R"), lambda vis: move_forward(vis, source_copy, size=20))
+        vis.register_key_callback(ord("F"), lambda vis: move_backward(vis, source_copy, size=20))
         vis.register_key_callback(ord("I"), lambda vis: next_pair(vis))
         vis.register_key_callback(ord("E"), lambda vis: save_transform_and_move_to_next_pair(vis,cum_trans,ns_final_transformations, ns_index, i))
         vis.register_key_callback(ord("Q"), close_window)
@@ -718,7 +729,7 @@ for i in range(len(merged_point_clouds)-1):
 
 # Calculate the final transformation based on all transformations
 ns_final_transformation = np.mean(ns_final_transformations,axis=0)
-np.save(os.path.join(out_dir, f'{local_path}_ns_final_transformation.npy'), ns_final_transformation)
+np.save(os.path.join(out_dir, f'{local_path_date}_ns_final_transformation.npy'), ns_final_transformation)
 
 # Apply final transformation to each target point cloud in pcd_pairs
 for i in range(len(merged_point_clouds)):
@@ -733,7 +744,7 @@ o3d.visualization.draw_geometries(merged_point_clouds, window_name='Final transf
 del merged_point_clouds
 
 # Create H5 file with average and individual transformations
-with h5py.File(os.path.join(out_dir, f'{local_path}_transformations.h5'), 'w') as f:
+with h5py.File(os.path.join(out_dir, f'{local_path_date}_transformations.h5'), 'w') as f:
     ew_grp = f.create_group('EW')
     ew_individual_grp = ew_grp.create_group('individual')
     ew_trans = ew_individual_grp.create_group('transformations')

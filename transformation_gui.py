@@ -298,6 +298,7 @@ def move_left(vis, source, size=1):
     cum_trans = np.dot(trans,cum_trans)
     source.transform(trans)
     update_visualization(vis, source)
+    print(cum_trans)
 
 
 # --------------------------------------------------
@@ -308,6 +309,7 @@ def move_right(vis, source, size=1):
     cum_trans = np.dot(trans,cum_trans)
     source.transform(trans)
     update_visualization(vis, source)
+    print(cum_trans)
 
 
 # --------------------------------------------------
@@ -318,6 +320,7 @@ def move_up(vis, source, size=1):
     cum_trans = np.dot(trans,cum_trans)
     source.transform(trans)
     update_visualization(vis, source)
+    print(cum_trans)
 
 
 # --------------------------------------------------
@@ -328,6 +331,7 @@ def move_down(vis, source, size=1):
     cum_trans = np.dot(trans,cum_trans)
     source.transform(trans)
     update_visualization(vis, source)
+    print(cum_trans)
 
 
 # --------------------------------------------------
@@ -338,6 +342,7 @@ def move_forward(vis, source, size=1):
     cum_trans = np.dot(trans,cum_trans)
     source.transform(trans)
     update_visualization(vis, source)
+    print(cum_trans)
 
 
 # --------------------------------------------------
@@ -348,6 +353,7 @@ def move_backward(vis, source, size=1):
     cum_trans = np.dot(trans,cum_trans)
     source.transform(trans)
     update_visualization(vis, source)
+    print(cum_trans)
 
 
 # --------------------------------------------------
@@ -362,10 +368,11 @@ def save_transform_and_move_to_next_pair(vis,cumulative_transform,list_of_transf
 
     global e_pressed
     e_pressed = True
-    print('Saving cumulative transformation')
+    print(f'Saving cumulative transformation\n{cumulative_transform}')
     list_of_transforms.append(cumulative_transform)
     print('Saved cumulative transformation')
     index.append(i)
+    next_pair(vis)
 
 
 # --------------------------------------------------
@@ -568,7 +575,7 @@ for i, (source, target) in enumerate(pcd_pairs):
 
     vis = o3d.visualization.VisualizerWithKeyCallback()
     vis.create_window()
-    vis.toggle_full_screen()
+    # vis.toggle_full_screen()
     # Application.instance.run()
 
     # Add point clouds
@@ -600,8 +607,7 @@ for i, (source, target) in enumerate(pcd_pairs):
 
     # Delete or reassign variables that are no longer needed
     del source_copy
-print(ew_negative_final_transformations)
-print(ew_positive_final_transformations)
+
 # Calculate the negative final transformation based on all transformations
 ew_negative_final_transformation = np.mean(ew_negative_final_transformations,axis=0)
 np.save(os.path.join(out_dir, f'{local_path}_ew_negative_final_transformation.npy'), ew_negative_final_transformation)
@@ -665,7 +671,7 @@ for i in range(len(merged_point_clouds)-1):
 
         vis = o3d.visualization.VisualizerWithKeyCallback()
         vis.create_window()
-        vis.toggle_full_screen()
+        # vis.toggle_full_screen()
 
         # Add point clouds
         vis.add_geometry(source_copy)
@@ -674,12 +680,12 @@ for i in range(len(merged_point_clouds)-1):
         cum_trans = np.eye(4)
 
         # Register key callbacks to move point cloud along the x-axis
-        vis.register_key_callback(ord("W"), lambda vis: move_up(vis, source_copy, size=20))
-        vis.register_key_callback(ord("A"), lambda vis: move_left(vis, source_copy, size=20))
-        vis.register_key_callback(ord("S"), lambda vis: move_down(vis, source_copy, size=20))
-        vis.register_key_callback(ord("D"), lambda vis: move_right(vis, source_copy, size=20))
-        vis.register_key_callback(ord("R"), lambda vis: move_forward(vis, source_copy, size=20))
-        vis.register_key_callback(ord("F"), lambda vis: move_backward(vis, source_copy, size=20))
+        vis.register_key_callback(ord("W"), lambda vis: move_up(vis, source_copy, size=40))
+        vis.register_key_callback(ord("A"), lambda vis: move_left(vis, source_copy, size=40))
+        vis.register_key_callback(ord("S"), lambda vis: move_down(vis, source_copy, size=40))
+        vis.register_key_callback(ord("D"), lambda vis: move_right(vis, source_copy, size=40))
+        vis.register_key_callback(ord("R"), lambda vis: move_forward(vis, source_copy, size=40))
+        vis.register_key_callback(ord("F"), lambda vis: move_backward(vis, source_copy, size=40))
         vis.register_key_callback(ord("I"), lambda vis: next_pair(vis))
         vis.register_key_callback(ord("E"), lambda vis: save_transform_and_move_to_next_pair(vis,cum_trans,ns_final_transformations, ns_index, i))
         vis.register_key_callback(ord("Q"), close_window)
@@ -696,7 +702,7 @@ np.save(os.path.join(out_dir, f'{local_path}_ns_final_transformation.npy'), ns_f
 # Apply final transformation to each target point cloud in pcd_pairs
 for i in range(len(merged_point_clouds)):
     if pcd_directions[i] == "Positive":
-        print(f'i: {i}')
+        # print(f'i: {i}')
         merged_point_clouds[i].transform(ns_final_transformation)
 
 # Visualize all merged point clouds in a single visualization

@@ -8,3 +8,4 @@ scipy==1.5.4
 sklearn==0.0
 h5py==3.8.0
 utm==0.6.0
+tables

@@ -1272,4 +1272,5 @@ subprocess.run(f"imkdir -p {cyverse_out_path} && icd {cyverse_out_path} && iput 
 # Clean working directory
 remove_directory(dir_path='scanner3DTop_Transformations')
 remove_directory(dir_path=local_path)
+remove_directory(dir_path='environment_logger')
 remove_file(file_path=selected_tar_file)

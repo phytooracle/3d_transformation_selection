@@ -29,6 +29,7 @@ from datetime import datetime, timedelta
 import subprocess as sp
 import utm
 import glob
+from multiprocessing import Pool
 
 sys.setrecursionlimit(10000) # Set the maximum recursion depth to 10000
 
@@ -616,17 +617,18 @@ def download_data(crop, season, level, sensor, sequence, cwd, outdir, download=T
         # Prepare to download data.
         out_path = os.path.join(outdir, irods_dict['season'][season], irods_dict['sensor'][sensor])
         if not os.path.isdir(out_path):
+
             os.makedirs(out_path)
 
-        if download:
-            os.chdir(out_path)
+            if download:
+                os.chdir(out_path)
 
-            # Download files.
-            for item in files: 
-                print(f'Downloading {item}.')
-                download_files(item=item, out_path=os.path.join(cwd, out_path))
-                
-            # os.chdir(cwd)
+                # Download files.
+                for item in files: 
+                    print(f'Downloading {item}.')
+                    download_files(item=item, out_path=os.path.join(cwd, out_path))
+                    
+                # os.chdir(cwd)
 
         return out_path
     
@@ -758,7 +760,80 @@ def get_date_position(data_path):
 
 
 #-------------------------------------------------------------------------------
+def process_file(jfile):
+    '''
+    Processes a single Environmental Logger JSON file, correcting the timestamp and extracting the necessary environmental parameters. 
+    
+    Input:
+        - jfile: Path to a single Environmental Logger JSON file
+    Output: 
+        - Dataframe containing corrected timestamp formats and environmental parameters from "environment_sensor_readings," including "timestamp," 
+          "weather_station," and "sensor par." The "timestamp" value is in format yyyy.MM.dd-HH:mm:ss, which will be converted in subsequent functions. 
+          The "weather_station values include sunDirection (degrees), airPressure (hPa), brightness (kilo Lux), relHumidity (relHumPerCent), temperature
+          (DegCelsius), windDirection (degrees), precipitation (mm/h), windVelocity (m/s). The "sensor par" value includes photosynthetic active radiation (umol/(m^2*s)).  
+    '''
+        
+    dfs = []
 
+    try:
+        with open(jfile) as f:
+            data = json.load(f)
+            for item in data['environment_sensor_readings']:
+                # Convert to appropriate datetime format
+                date = pd.to_datetime(item['timestamp'], format="%Y.%m.%d-%H:%M:%S")
+                
+                # Create a dataframe from the data
+                data = {key: float(value['value']) for key, value in item['weather_station'].items()} #f"{key}_{value['unit']}"
+                df = pd.DataFrame(data, index=[0])
+
+                # Add datetime to the dataframe
+                df['time'] = date
+
+                # Add PAR to df 
+                df['par'] = float(item['sensor par']['value'])
+                
+                dfs.append(df)
+
+    except:
+        
+        print("An error occurred while reading the JSON file or processing the data.")
+        dfs = []
+
+    return dfs
+
+
+#-------------------------------------------------------------------------------
+def get_environment_df(data_path):
+    '''
+    Uses multiprocessing to run the function `process_file` to extract multiple Environmental Logger JSON files and combine them into a single dataframe. 
+    
+    Input:
+        - data_path: Path containing the raw data (level_0)
+    Output: 
+        - Merged dataframe containing the timestamp and environmental parameters from multiple Environmental Logger JSON files
+    '''
+        
+    with Pool() as pool:
+        results = pool.map(process_file, glob.glob(data_path))
+    dfs = [df for result in results for df in result]
+    # Combine all dataframes in the list into one
+    env_df = pd.concat(dfs, ignore_index=True)
+    return env_df.sort_values('time')
+
+#-------------------------------------------------------------------------------
+def custom_sort(file):
+    # extract the directory name from the file path
+    directory = os.path.dirname(file)
+    # find the index of the directory in the dirs list
+    try:
+        index = dirs.index(directory)
+    except ValueError:
+        # return a default value for files without a parent directory
+        index = -1
+    return index
+
+
+#-------------------------------------------------------------------------------
 # Initialize Tkinter
 root = tk.Tk()
 root.withdraw()
@@ -775,6 +850,7 @@ dir_paths = {
 
 # Select season
 dir_path = select_dir_path(dir_paths)
+season_number = str(dir_path.split(os.sep)[-4].split('_')[1])
 
 # Get list of dates within season directory on CyVerse
 result = subprocess.run(["ils", dir_path], stdout=subprocess.PIPE)
@@ -786,355 +862,414 @@ tar_files = [line.strip() for line in output.split("\n") if line.endswith(".tar.
 # Define local path of tarball and extracted contents
 selected_tar_file = select_tar_file(tar_files)
 local_path = selected_tar_file.split(".")[0]
-date_species  = local_path.replace('scanner3DTop-', '')
-date_list = get_env_dates(date_string = date_species)
+
+# Download and extract data to local path
+if not os.path.isdir(local_path):
+
+    print(f'Downloading {select_tar_file}.')
+    subprocess.run(["iget", "-PVT", os.path.join(dir_path, selected_tar_file)]) #, local_path])
+    
+    print(f'Extracting at {local_path}.')
+    tar = tarfile.open(selected_tar_file, "r:gz")
+    tar.extractall()
+    tar.close()
 
 # Download Environment Logger data
+date_species  = local_path.replace('scanner3DTop-', '')
+date_list = get_env_dates(date_string = date_species)
 wd = os.getcwd()
-for date in date_list:
 
+
+for date in date_list:
+    
     env_path = download_data(
                     crop = "NA",
-                    season = args.season,
+                    season = season_number,
                     level = '0',
                     sensor = 'ENV',
                     sequence = f'{date}.tar.gz',
                     cwd = wd,
-                    outdir = 'environmental_association')
+                    outdir = 'environment_logger')
     
     os.chdir(wd)
 
 # Get gantry metadata
-meta_df = get_date_position(data_path = os.path.join(data_path, date_string, '*', '*', '*.json'))
+meta_df = get_date_position(data_path = os.path.join(local_path, '*', '*', '*.json'))
 
-# # Download and extract data to local path
-# if not os.path.isdir(local_path):
+# Open environmental logger data
+env_df = get_environment_df(data_path = os.path.join(env_path, '*', '*', '*.json'))
 
-#     print(f'Downloading {select_tar_file}.')
-#     subprocess.run(["iget", "-PVT", os.path.join(dir_path, selected_tar_file)]) #, local_path])
-    
-#     print(f'Extracting at {local_path}.')
-#     tar = tarfile.open(selected_tar_file, "r:gz")
-#     tar.extractall()
-#     tar.close()
-
-# # Create an empty list to store each pair of point clouds
-# pcd_pairs = []
-# pcd_directions = []
+# Create an empty list to store each pair of point clouds
+pcd_pairs = []
+pcd_directions = []
 # fields = []
 # z_positions = []
-# filenames = []
+filenames = []
 
-# for subdir, dirs, files in os.walk(local_path):
-#     dirs.sort()
-#     ply_files = [file for file in files if file.endswith(".ply")]
-#     json_files = [file for file in files if file.endswith(".json")]
+# all_subdirs = []
+all_dirs = []
+all_ply_files = []
 
-#     if len(ply_files) == 2:
-#         try:
-#             # Iterate over the items in ply_files
-#             for item in ply_files:
+for subdir, dirs, files in os.walk(local_path):
 
-#                 # Check if the item contains "east"
-#                 if "east" in item:
-#                     # Measure the time it takes to read the east point cloud
-#                     start = time.time()
-#                     east_pcd = o3d.io.read_point_cloud(os.path.join(subdir, item),
-#                                                        remove_nan_points=True,
-#                                                        remove_infinite_points=True)
-#                     end = time.time()
-#                     print(f'Time taken to read {item}: {end - start:.2f} seconds')
+    dirs.sort()
+    files.sort(key=custom_sort)
+    # all_subdirs.extend(subdir)
+    all_dirs.extend(dirs)
+    ply_files = [file for file in files if file.endswith(".ply")]
+    if len(ply_files) == 2:
+        all_ply_files.append(tuple(ply_files))
+    # else:
+    #     all_ply_files.append(())
+    # json_files = [file for file in files if file.endswith(".json")]
 
-#                     # Measure the time it takes to downsample the east point cloud
-#                     start = time.time()
-#                     down_east_pcd = copy.deepcopy(east_pcd).voxel_down_sample(voxel_size=15)
-#                     end = time.time()
-#                     print(f'Time taken to downsample {item}: {end - start:.2f} seconds')
+# all_dirs.sort()
+date_format = '%Y-%m-%d__%H-%M-%S-%f'
+datetimes = [datetime.strptime(d, date_format) for d in all_dirs]
+formatted_datetimes = [dt.strftime('%Y-%m-%d %H:%M:%S') for dt in datetimes]
+
+base_filenames = [name[0].split('__')[0] for name in all_ply_files]
+
+try:
+
+    df = pd.DataFrame({'time': formatted_datetimes, 'directories': all_dirs, 'filename': base_filenames})
+    df['time'] = pd.to_datetime(df['time'])
+
+    result = pd.merge_asof(df, env_df, on='time', direction='nearest', tolerance=pd.Timedelta("1m"))
+
+except Exception as e:
+
+    print(f"An error occurred processing point clouds, a subdirectory may be an incomplete pair: {e}")
+
+for (dir_path, ply_files, date_time) in zip(all_dirs, all_ply_files, formatted_datetimes):
+
+    if len(ply_files) == 2:
+
+        iter_df = result[result['time']==date_time]
+
+        try:
+  
+            # Iterate over the items in ply_files
+            for item in ply_files:
+
+
+                # Check if the item contains "east"
+                if "east" in item:
+                    # Measure the time it takes to read the east point cloud
+                    start = time.time()
+                    east_pcd = o3d.io.read_point_cloud(os.path.join(local_path, dir_path, item),
+                                                       remove_nan_points=True,
+                                                       remove_infinite_points=True)
+                    end = time.time()
+                    print(f'Time taken to read {item}: {end - start:.2f} seconds')
+
+                    # Measure the time it takes to downsample the east point cloud
+                    start = time.time()
+                    down_east_pcd = copy.deepcopy(east_pcd).voxel_down_sample(voxel_size=15)
+                    end = time.time()
+                    print(f'Time taken to downsample {item}: {end - start:.2f} seconds')
                 
-#                 # Check if the item contains "west"
-#                 elif "west" in item:
-#                     # Measure the time it takes to read the west point cloud
-#                     start = time.time()
-#                     west_pcd = o3d.io.read_point_cloud(os.path.join(subdir, item),
-#                                                        remove_nan_points=True,
-#                                                        remove_infinite_points=True)
-#                     end = time.time()
-#                     print(f'Time taken to read {item}: {end - start:.2f} seconds')
+                # Check if the item contains "west"
+                elif "west" in item:
+                    # Measure the time it takes to read the west point cloud
+                    start = time.time()
+                    west_pcd = o3d.io.read_point_cloud(os.path.join(local_path, dir_path, item),
+                                                       remove_nan_points=True,
+                                                       remove_infinite_points=True)
+                    end = time.time()
+                    print(f'Time taken to read {item}: {end - start:.2f} seconds')
 
-#                     # Measure the time it takes to downsample the west point cloud
-#                     start = time.time()
-#                     down_west_pcd = copy.deepcopy(west_pcd).voxel_down_sample(voxel_size=15)
-#                     end = time.time()
-#                     print(f'Time taken to downsample {item}: {end - start:.2f} seconds')
+                    # Measure the time it takes to downsample the west point cloud
+                    start = time.time()
+                    down_west_pcd = copy.deepcopy(west_pcd).voxel_down_sample(voxel_size=15)
+                    end = time.time()
+                    print(f'Time taken to downsample {item}: {end - start:.2f} seconds')
             
-#                 meta_path = os.path.join(subdir, '_'.join([item.split('__')[0], 'metadata.json']))
+                meta_path = os.path.join(local_path, dir_path, '_'.join([item.split('__')[0], 'metadata.json']))
 
-#             print(f'Opening metadata file {meta_path}.')
-#             metadata = load_metadata_dict(meta_path)
+            print(f'Opening metadata file {meta_path}.')
+            metadata = load_metadata_dict(meta_path)
 
-#             # Get filename
-#             filename = '/'.join([os.path.basename(subdir), item.split('__')[0]])
-
-#             # Get field location
-#             x_position = float(metadata['gantry_system_variable_metadata']['position x [m]'])
-#             field = get_direction(x_position)
-
-#             # Get box height
-#             z_position = float(metadata['gantry_system_variable_metadata']['position z [m]'])
+            # Get filename
+            filename = '/'.join([dir_path, item.split('__')[0]])
             
-#             # Add filename, field locations, and box heights to lists
-#             filenames.append(filename)
-#             fields.append(field)
-#             z_positions.append(z_position)
+            # Get row index of dataframe
+            row_index = result.loc[result['filename'] == item.split('__')[0]].index[0]
 
-#             print('Rotating point clouds.')
-#             new_east_down = rotate_pcd(down_east_pcd,90) #,merged_down_pcd)
-#             new_west_down = rotate_pcd(down_west_pcd,90) #,merged_down_pcd)
+            # Get field location
+            x_position = float(metadata['gantry_system_variable_metadata']['position x [m]'])
+            field = get_direction(x_position)
+            
 
-#             if metadata['gantry_system_variable_metadata']['scanIsInPositiveDirection'] == "False":
+            # Get box height
+            x_position = float(metadata['gantry_system_variable_metadata']['position x [m]'])
+            y_position = float(metadata['gantry_system_variable_metadata']['position y [m]'])
+            z_position = float(metadata['gantry_system_variable_metadata']['position z [m]'])
 
-#                 new_east_down = new_east_down.translate([0,(float(metadata['gantry_system_variable_metadata']['position x [m]'])-3.798989)/(8.904483-7.964989)*1000,0])
-#                 new_west_down = new_west_down.translate([0,(float(metadata['gantry_system_variable_metadata']['position x [m]'])-3.798989)/(8.904483-7.964989)*1000,0])
-#                 pcd_directions.append("Negative")
-#             else:
+            # Add filename, field locations, and box heights to lists
+            filenames.append(filename)
+            # fields.append(field)
+            # z_positions.append(z_position)
 
-#                 new_east_down = new_east_down.translate([22280.82692587,(float(metadata['gantry_system_variable_metadata']['position x [m]'])-3.798989)/(8.904483-7.964989)*1000,0])
-#                 new_west_down = new_west_down.translate([22280.82692587,(float(metadata['gantry_system_variable_metadata']['position x [m]'])-3.798989)/(8.904483-7.964989)*1000,0])
-#                 pcd_directions.append("Positive")
+            print('Rotating point clouds.')
+            new_east_down = rotate_pcd(down_east_pcd,90) #,merged_down_pcd)
+            new_west_down = rotate_pcd(down_west_pcd,90) #,merged_down_pcd)
 
-#             # store the pair of point clouds for later use
+            if metadata['gantry_system_variable_metadata']['scanIsInPositiveDirection'] == "False":
 
-#             print("Appending point cloud pair to list")
-#             pcd_pairs.append((new_east_down, new_west_down))
-#             print("Appended point cloud pair to list")
+                new_east_down = new_east_down.translate([0,(float(metadata['gantry_system_variable_metadata']['position x [m]'])-3.798989)/(8.904483-7.964989)*1000,0])
+                new_west_down = new_west_down.translate([0,(float(metadata['gantry_system_variable_metadata']['position x [m]'])-3.798989)/(8.904483-7.964989)*1000,0])
+                pcd_direction = "Negative"
+                pcd_directions.append(pcd_direction)
+            else:
 
-#             del metadata, east_pcd, down_east_pcd, new_east_down, west_pcd, down_west_pcd, new_west_down
+                new_east_down = new_east_down.translate([22280.82692587,(float(metadata['gantry_system_variable_metadata']['position x [m]'])-3.798989)/(8.904483-7.964989)*1000,0])
+                new_west_down = new_west_down.translate([22280.82692587,(float(metadata['gantry_system_variable_metadata']['position x [m]'])-3.798989)/(8.904483-7.964989)*1000,0])
+                pcd_direction = "Positive"
+                pcd_directions.append(pcd_direction)
 
-#         except Exception as e:
-#             print(f"An error occurred while processing {ply_files[0]} and {ply_files[1]}: {e}")
+            # Save results to dataframe
+            result.loc[row_index, 'field'] = field
+            result.loc[row_index, 'x_position'] = x_position
+            result.loc[row_index, 'y_position'] = y_position
+            result.loc[row_index, 'z_position'] = z_position
+            result.loc[row_index, 'scan_direction'] = pcd_direction
 
-# # Define the output directory
-# local_path_date = extract_date(string=local_path)
-# out_dir = os.path.join('scanner3DTop_Transformations', local_path_date)
+            # store the pair of point clouds for later use
+            print("Appending point cloud pair to list")
+            pcd_pairs.append((new_east_down, new_west_down))
+            print("Appended point cloud pair to list")
 
-# # Create output directory
-# if not os.path.isdir(out_dir):
-#     os.makedirs(out_dir)
+            del metadata, east_pcd, down_east_pcd, new_east_down, west_pcd, down_west_pcd, new_west_down
 
-# # Step 1: Align the point clouds within each pair (EW)
-# # ew_final_transformations = []
-# ew_positive_final_transformations = []
-# ew_negative_final_transformations = []
-# ew_index = []
-# for i, (source, target) in enumerate(pcd_pairs):
+        except Exception as e:
+            print(f"An error occurred while processing {ply_files[0]} and {ply_files[1]}: {e}")
+
+# Define the output directory
+local_path_date = extract_date(string=local_path)
+out_dir = os.path.join('scanner3DTop_Transformations', local_path_date)
+
+# Create output directory
+if not os.path.isdir(out_dir):
+    os.makedirs(out_dir)
+
+# Step 1: Align the point clouds within each pair (EW)
+# ew_final_transformations = []
+ew_positive_final_transformations = []
+ew_negative_final_transformations = []
+ew_index = []
+for i, (source, target) in enumerate(pcd_pairs):
     
-#     e_pressed = False
+    e_pressed = False
 
-#     # Create a copy of source
-#     source_copy = copy.deepcopy(source)
+    # Create a copy of source
+    source_copy = copy.deepcopy(source)
     
-#     # Paint the point clouds for visualization
-#     print('Preparing point cloud pair')
-#     colorize_point_cloud(source, "viridis")
-#     colorize_point_cloud(source_copy, "viridis")
-#     colorize_point_cloud(target, "plasma")
-#     # source.paint_uniform_color([1, 0.706, 0])
-#     # source_copy.paint_uniform_color([1, 0.706, 0])
-#     # target.paint_uniform_color([0, 0.651, 0.929])  
+    # Paint the point clouds for visualization
+    print('Preparing point cloud pair')
+    colorize_point_cloud(source, "viridis")
+    colorize_point_cloud(source_copy, "viridis")
+    colorize_point_cloud(target, "plasma")
+    # source.paint_uniform_color([1, 0.706, 0])
+    # source_copy.paint_uniform_color([1, 0.706, 0])
+    # target.paint_uniform_color([0, 0.651, 0.929])  
 
-#     # Set up the visualization
-#     print("Press 'W', 'A', 'S', 'D', 'R', or 'F' to move the source point cloud")
-#     print("Press 'E' to save transformation")
-#     print("Press 'Q' to move to next pair")
-#     print("Press 'I' to ignore this pair and move to the next pair")
+    # Set up the visualization
+    print("Press 'W', 'A', 'S', 'D', 'R', or 'F' to move the source point cloud")
+    print("Press 'E' to save transformation")
+    print("Press 'Q' to move to next pair")
+    print("Press 'I' to ignore this pair and move to the next pair")
 
-#     vis = o3d.visualization.VisualizerWithKeyCallback()
-#     vis.create_window()
-#     # vis.toggle_full_screen()
-#     # Application.instance.run()
+    vis = o3d.visualization.VisualizerWithKeyCallback()
+    vis.create_window()
+    # vis.toggle_full_screen()
+    # Application.instance.run()
 
-#     # Add point clouds
-#     vis.add_geometry(source_copy)
-#     vis.add_geometry(target)
+    # Add point clouds
+    vis.add_geometry(source_copy)
+    vis.add_geometry(target)
 
-#     cum_trans = np.eye(4)
+    cum_trans = np.eye(4)
 
-#     # Register key callbacks to move point cloud along the x-axis
-#     vis.register_key_callback(ord("W"), lambda vis: move_up(vis, source_copy, size=5))
-#     vis.register_key_callback(ord("A"), lambda vis: move_left(vis, source_copy, size=5))
-#     vis.register_key_callback(ord("S"), lambda vis: move_down(vis, source_copy, size=5))
-#     vis.register_key_callback(ord("D"), lambda vis: move_right(vis, source_copy, size=5))
-#     vis.register_key_callback(ord("R"), lambda vis: move_forward(vis, source_copy, size=5))
-#     vis.register_key_callback(ord("F"), lambda vis: move_backward(vis, source_copy, size=5))
-#     vis.register_key_callback(ord("I"), lambda vis: next_pair(vis))
+    # Register key callbacks to move point cloud along the x-axis
+    vis.register_key_callback(ord("W"), lambda vis: move_up(vis, source_copy, size=5))
+    vis.register_key_callback(ord("A"), lambda vis: move_left(vis, source_copy, size=5))
+    vis.register_key_callback(ord("S"), lambda vis: move_down(vis, source_copy, size=5))
+    vis.register_key_callback(ord("D"), lambda vis: move_right(vis, source_copy, size=5))
+    vis.register_key_callback(ord("R"), lambda vis: move_forward(vis, source_copy, size=5))
+    vis.register_key_callback(ord("F"), lambda vis: move_backward(vis, source_copy, size=5))
+    vis.register_key_callback(ord("I"), lambda vis: next_pair(vis))
     
-#     if pcd_directions[i] == "Positive":
-#         vis.register_key_callback(ord("E"), lambda vis: save_transform_and_move_to_next_pair(vis,cum_trans,ew_positive_final_transformations, ew_index, i))
-#     else:
-#         vis.register_key_callback(ord("E"), lambda vis: save_transform_and_move_to_next_pair(vis,cum_trans,ew_negative_final_transformations, ew_index, i))
+    if pcd_directions[i] == "Positive":
+        vis.register_key_callback(ord("E"), lambda vis: save_transform_and_move_to_next_pair(vis,cum_trans,ew_positive_final_transformations, ew_index, i))
+    else:
+        vis.register_key_callback(ord("E"), lambda vis: save_transform_and_move_to_next_pair(vis,cum_trans,ew_negative_final_transformations, ew_index, i))
 
-#     vis.register_key_callback(ord("Q"), close_window)
+    vis.register_key_callback(ord("Q"), close_window)
 
-#     # Run and destroy the visualization
-#     vis.poll_events()
-#     vis.run()
-#     vis.destroy_window()
+    # Run and destroy the visualization
+    vis.poll_events()
+    vis.run()
+    vis.destroy_window()
 
-#     # Delete or reassign variables that are no longer needed
-#     del source_copy
+    # Delete or reassign variables that are no longer needed
+    del source_copy
 
-# # Calculate the negative final transformation based on all transformations
-# ew_negative_final_transformation = np.mean(ew_negative_final_transformations,axis=0)
-# np.save(os.path.join(out_dir, f'{local_path_date}_ew_negative_final_transformation.npy'), ew_negative_final_transformation)
+# Calculate the negative final transformation based on all transformations
+ew_negative_final_transformation = np.mean(ew_negative_final_transformations,axis=0)
+np.save(os.path.join(out_dir, f'{local_path_date}_ew_negative_final_transformation.npy'), ew_negative_final_transformation)
 
-# # Calculate the positive final transformation based on all transformations
-# ew_positive_final_transformation = np.mean(ew_positive_final_transformations,axis=0)
-# np.save(os.path.join(out_dir, f'{local_path_date}_ew_positive_final_transformation.npy'), ew_positive_final_transformation)
+# Calculate the positive final transformation based on all transformations
+ew_positive_final_transformation = np.mean(ew_positive_final_transformations,axis=0)
+np.save(os.path.join(out_dir, f'{local_path_date}_ew_positive_final_transformation.npy'), ew_positive_final_transformation)
 
-# # Apply final transformation to each source point cloud in pcd_pairs
-# for i, (source, target) in enumerate(pcd_pairs):
+# Apply final transformation to each source point cloud in pcd_pairs
+for i, (source, target) in enumerate(pcd_pairs):
 
-#     if pcd_directions[i] == "Positive":
-#         source.transform(ew_positive_final_transformation)
-#     else:
-#         source.transform(ew_negative_final_transformation)
+    if pcd_directions[i] == "Positive":
+        source.transform(ew_positive_final_transformation)
+    else:
+        source.transform(ew_negative_final_transformation)
 
-# # Create a list of all point clouds
-# all_point_clouds = []
-# for i, (source, target) in enumerate(pcd_pairs):
-#     all_point_clouds.append(source)
-#     all_point_clouds.append(target)
+# Create a list of all point clouds
+all_point_clouds = []
+for i, (source, target) in enumerate(pcd_pairs):
+    all_point_clouds.append(source)
+    all_point_clouds.append(target)
 
-# # Visualize all point cloud pairs in a single visualization
-# o3d.visualization.draw_geometries(all_point_clouds, window_name='Final EW transformation')
+# Visualize all point cloud pairs in a single visualization
+o3d.visualization.draw_geometries(all_point_clouds, window_name='Final EW transformation')
 
-# del all_point_clouds, cum_trans
+del all_point_clouds, cum_trans
 
-# # Step 2: Align pairs to each other (NS)
-# merged_point_clouds = []
-# for i in range(len(pcd_pairs)):
-#     source = pcd_pairs[i][0]
-#     target = pcd_pairs[i][1]
-#     merged_point_cloud = source + target
-#     voxel_size = 15 # Set the voxel size for downsampling
-#     downsampled_merged_point_cloud = o3d.geometry.PointCloud.voxel_down_sample(merged_point_cloud, voxel_size)
-#     merged_point_clouds.append(downsampled_merged_point_cloud)
+# Step 2: Align pairs to each other (NS)
+merged_point_clouds = []
+for i in range(len(pcd_pairs)):
+    source = pcd_pairs[i][0]
+    target = pcd_pairs[i][1]
+    merged_point_cloud = source + target
+    voxel_size = 15 # Set the voxel size for downsampling
+    downsampled_merged_point_cloud = o3d.geometry.PointCloud.voxel_down_sample(merged_point_cloud, voxel_size)
+    merged_point_clouds.append(downsampled_merged_point_cloud)
 
-# del pcd_pairs
+del pcd_pairs
 
-# ns_final_transformations = []
-# ns_index = []
-# for i in range(len(merged_point_clouds)-1):
-#     if pcd_directions[i] == "Positive":
-#         e_pressed = False
+ns_final_transformations = []
+ns_index = []
+for i in range(len(merged_point_clouds)-1):
+    if pcd_directions[i] == "Positive":
+        e_pressed = False
 
-#         source = merged_point_clouds[i]
-#         target = merged_point_clouds[i+1]
-#         source_copy = copy.deepcopy(source)
+        source = merged_point_clouds[i]
+        target = merged_point_clouds[i+1]
+        source_copy = copy.deepcopy(source)
 
-#         # Paint the point clouds for visualization
-#         print('Preparing point cloud pair')
-#         colorize_point_cloud(source, "viridis")
-#         colorize_point_cloud(source_copy, "viridis")
-#         colorize_point_cloud(target, "plasma")
-#         # source.paint_uniform_color([1, 0.706, 0])
-#         # source_copy.paint_uniform_color([1, 0.706, 0])
-#         # target.paint_uniform_color([0, 0.651, 0.929])  
+        # Paint the point clouds for visualization
+        print('Preparing point cloud pair')
+        colorize_point_cloud(source, "viridis")
+        colorize_point_cloud(source_copy, "viridis")
+        colorize_point_cloud(target, "plasma")
+        # source.paint_uniform_color([1, 0.706, 0])
+        # source_copy.paint_uniform_color([1, 0.706, 0])
+        # target.paint_uniform_color([0, 0.651, 0.929])  
         
-#         # Set up the visualization
-#         print("Press 'W', 'A', 'S', 'D', 'R', or 'F' to move the source point cloud")
-#         print("Press 'E' to save transformation")
-#         print("Press 'Q' to move to next pair")
-#         print("Press 'I' to ignore this pair and move to the next pair")
+        # Set up the visualization
+        print("Press 'W', 'A', 'S', 'D', 'R', or 'F' to move the source point cloud")
+        print("Press 'E' to save transformation")
+        print("Press 'Q' to move to next pair")
+        print("Press 'I' to ignore this pair and move to the next pair")
 
-#         vis = o3d.visualization.VisualizerWithKeyCallback()
-#         vis.create_window()
-#         # vis.toggle_full_screen()
+        vis = o3d.visualization.VisualizerWithKeyCallback()
+        vis.create_window()
+        # vis.toggle_full_screen()
 
-#         # Add point clouds
-#         vis.add_geometry(source_copy)
-#         vis.add_geometry(target)
+        # Add point clouds
+        vis.add_geometry(source_copy)
+        vis.add_geometry(target)
 
-#         cum_trans = np.eye(4)
+        cum_trans = np.eye(4)
 
-#         # Register key callbacks to move point cloud along the x-axis
-#         vis.register_key_callback(ord("W"), lambda vis: move_up(vis, source_copy, size=20))
-#         vis.register_key_callback(ord("A"), lambda vis: move_left(vis, source_copy, size=20))
-#         vis.register_key_callback(ord("S"), lambda vis: move_down(vis, source_copy, size=20))
-#         vis.register_key_callback(ord("D"), lambda vis: move_right(vis, source_copy, size=20))
-#         vis.register_key_callback(ord("R"), lambda vis: move_forward(vis, source_copy, size=20))
-#         vis.register_key_callback(ord("F"), lambda vis: move_backward(vis, source_copy, size=20))
-#         vis.register_key_callback(ord("I"), lambda vis: next_pair(vis))
-#         vis.register_key_callback(ord("E"), lambda vis: save_transform_and_move_to_next_pair(vis,cum_trans,ns_final_transformations, ns_index, i))
-#         vis.register_key_callback(ord("Q"), close_window)
+        # Register key callbacks to move point cloud along the x-axis
+        vis.register_key_callback(ord("W"), lambda vis: move_up(vis, source_copy, size=20))
+        vis.register_key_callback(ord("A"), lambda vis: move_left(vis, source_copy, size=20))
+        vis.register_key_callback(ord("S"), lambda vis: move_down(vis, source_copy, size=20))
+        vis.register_key_callback(ord("D"), lambda vis: move_right(vis, source_copy, size=20))
+        vis.register_key_callback(ord("R"), lambda vis: move_forward(vis, source_copy, size=20))
+        vis.register_key_callback(ord("F"), lambda vis: move_backward(vis, source_copy, size=20))
+        vis.register_key_callback(ord("I"), lambda vis: next_pair(vis))
+        vis.register_key_callback(ord("E"), lambda vis: save_transform_and_move_to_next_pair(vis,cum_trans,ns_final_transformations, ns_index, i))
+        vis.register_key_callback(ord("Q"), close_window)
 
-#         # Run and destroy the visualization
-#         vis.poll_events()
-#         vis.run()
-#         vis.destroy_window()
+        # Run and destroy the visualization
+        vis.poll_events()
+        vis.run()
+        vis.destroy_window()
 
-# # Calculate the final transformation based on all transformations
-# ns_final_transformation = np.mean(ns_final_transformations,axis=0)
-# np.save(os.path.join(out_dir, f'{local_path_date}_ns_final_transformation.npy'), ns_final_transformation)
+# Calculate the final transformation based on all transformations
+ns_final_transformation = np.mean(ns_final_transformations,axis=0)
+np.save(os.path.join(out_dir, f'{local_path_date}_ns_final_transformation.npy'), ns_final_transformation)
 
-# # Apply final transformation to each target point cloud in pcd_pairs
-# for i in range(len(merged_point_clouds)):
-#     if pcd_directions[i] == "Positive":
-#         # print(f'i: {i}')
-#         merged_point_clouds[i].transform(ns_final_transformation)
+# Apply final transformation to each target point cloud in pcd_pairs
+for i in range(len(merged_point_clouds)):
+    if pcd_directions[i] == "Positive":
+        # print(f'i: {i}')
+        merged_point_clouds[i].transform(ns_final_transformation)
 
-# # Visualize all merged point clouds in a single visualization
-# o3d.visualization.draw_geometries(merged_point_clouds, window_name='Final transformation')
+# Visualize all merged point clouds in a single visualization
+o3d.visualization.draw_geometries(merged_point_clouds, window_name='Final transformation')
 
-# # Clean memory
-# del merged_point_clouds
+# Clean memory
+del merged_point_clouds
 
-# # Create H5 file with average and individual transformations
-# with h5py.File(os.path.join(out_dir, f'{local_path_date}_transformations.h5'), 'w') as f:
-#     ew_grp = f.create_group('EW')
-#     ew_individual_grp = ew_grp.create_group('individual')
-#     ew_trans = ew_individual_grp.create_group('transformations')
+# Create H5 file with average and individual transformations
+with h5py.File(os.path.join(out_dir, f'{local_path_date}_transformations.h5'), 'w') as f:
+    ew_grp = f.create_group('EW')
+    ew_individual_grp = ew_grp.create_group('individual')
+    ew_trans = ew_individual_grp.create_group('transformations')
 
-#     ew_positive_trans = ew_trans.create_group('positive')
-#     for i, transformation in enumerate(ew_positive_final_transformations):
-#         ew_idx = ew_index[i]
-#         ew_positive_trans.create_dataset(filenames[ew_idx], data=transformation) #.split('/')[1]
+    ew_positive_trans = ew_trans.create_group('positive')
+    for i, transformation in enumerate(ew_positive_final_transformations):
+        ew_idx = ew_index[i]
+        ew_positive_trans.create_dataset(filenames[ew_idx], data=transformation) #.split('/')[1]
 
-#     ew_negative_trans = ew_trans.create_group('negative')
-#     for i, transformation in enumerate(ew_negative_final_transformations):
-#         ew_idx = ew_index[i]
-#         ew_negative_trans.create_dataset(filenames[ew_idx], data=transformation) #.split('/')[1]
+    ew_negative_trans = ew_trans.create_group('negative')
+    for i, transformation in enumerate(ew_negative_final_transformations):
+        ew_idx = ew_index[i]
+        ew_negative_trans.create_dataset(filenames[ew_idx], data=transformation) #.split('/')[1]
 
-#     ew_individual_grp.create_dataset('fields', data=fields)
-#     ew_individual_grp.create_dataset('z_positions', data=z_positions)
-#     ew_individual_grp.create_dataset('filenames', data=filenames, dtype=h5py.special_dtype(vlen=str))
+    # ew_individual_grp.create_dataset('fields', data=fields)
+    # ew_individual_grp.create_dataset('z_positions', data=z_positions)
+    # ew_individual_grp.create_dataset('filenames', data=filenames, dtype=h5py.special_dtype(vlen=str))
     
-#     ew_average_grp = ew_grp.create_group('average')
-#     ew_negative_average_grp = ew_average_grp.create_group('negative')
-#     ew_positive_average_grp = ew_average_grp.create_group('positive')
-#     ew_negative_average_grp.create_dataset('transformation', data=ew_negative_final_transformation)
-#     ew_positive_average_grp.create_dataset('transformation', data=ew_positive_final_transformation)
+    ew_average_grp = ew_grp.create_group('average')
+    ew_negative_average_grp = ew_average_grp.create_group('negative')
+    ew_positive_average_grp = ew_average_grp.create_group('positive')
+    ew_negative_average_grp.create_dataset('transformation', data=ew_negative_final_transformation)
+    ew_positive_average_grp.create_dataset('transformation', data=ew_positive_final_transformation)
     
-#     ns_grp = f.create_group('NS')
-#     ns_individual_grp = ns_grp.create_group('individual')
-#     ns_trans = ns_individual_grp.create_group('transformations')
-#     for i, transformation in enumerate(ns_final_transformations):
-#         ns_idx = ns_index[i]
-#         ns_trans.create_dataset(filenames[ns_idx], data=transformation) #.split('/')[1]
-#     ns_individual_grp.create_dataset('fields', data=fields)
-#     ns_individual_grp.create_dataset('z_positions', data=z_positions)
-#     ns_individual_grp.create_dataset('filenames', data=filenames, dtype=h5py.special_dtype(vlen=str))
+    ns_grp = f.create_group('NS')
+    ns_individual_grp = ns_grp.create_group('individual')
+    ns_trans = ns_individual_grp.create_group('transformations')
+    for i, transformation in enumerate(ns_final_transformations):
+        ns_idx = ns_index[i]
+        ns_trans.create_dataset(filenames[ns_idx], data=transformation) #.split('/')[1]
+    # ns_individual_grp.create_dataset('fields', data=fields)
+    # ns_individual_grp.create_dataset('z_positions', data=z_positions)
+    # ns_individual_grp.create_dataset('filenames', data=filenames, dtype=h5py.special_dtype(vlen=str))
 
-#     ns_average_grp = ns_grp.create_group('average')
-#     ns_average_grp.create_dataset('transformation', data=ns_final_transformation)
+    ns_average_grp = ns_grp.create_group('average')
+    ns_average_grp.create_dataset('transformation', data=ns_final_transformation)
 
-# # Define CyVerse output directory
-# cyverse_out_path = os.path.join(dir_path, 'scanner3DTop_Transformations')
+# assuming you have a DataFrame called results
+result.to_hdf(os.path.join(out_dir, f'{local_path_date}_transformations.h5'), key='environment_logger')
 
-# # Upload data to CyVerse
-# subprocess.run(f"imkdir -p {cyverse_out_path} && icd {cyverse_out_path} && iput -rfKPVT {out_dir}", shell=True)
+# Define CyVerse output directory
+cyverse_out_path = os.path.join(dir_path, 'scanner3DTop_Transformations')
 
-# # Clean working directory
-# remove_directory(dir_path='scanner3DTop_Transformations')
-# remove_directory(dir_path=local_path)
-# remove_file(file_path=selected_tar_file)
+# Upload data to CyVerse
+subprocess.run(f"imkdir -p {cyverse_out_path} && icd {cyverse_out_path} && iput -rfKPVT {out_dir}", shell=True)
+
+# Clean working directory
+remove_directory(dir_path='scanner3DTop_Transformations')
+remove_directory(dir_path=local_path)
+remove_file(file_path=selected_tar_file)

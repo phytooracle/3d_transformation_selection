@@ -612,23 +612,23 @@ def download_data(crop, season, level, sensor, sequence, cwd, outdir, download=T
         # Get list of all files that match a character sequence.
         print(f'Searching for files matching "{os.path.join(data_path, sequence)}". Note: This process may take 1-5 minutes.')
         files = get_file_list(data_path, sequence)
-        print('Matches obtained.')
+        print(f'Matches obtained: {files}')
 
         # Prepare to download data.
         out_path = os.path.join(outdir, irods_dict['season'][season], irods_dict['sensor'][sensor])
+        
         if not os.path.isdir(out_path):
-
             os.makedirs(out_path)
 
-            if download:
-                os.chdir(out_path)
+        if download:
+            os.chdir(out_path)
 
-                # Download files.
-                for item in files: 
-                    print(f'Downloading {item}.')
-                    download_files(item=item, out_path=os.path.join(cwd, out_path))
-                    
-                # os.chdir(cwd)
+            # Download files.
+            for item in files: 
+                print(f'Downloading {item}.')
+                download_files(item=item, out_path=os.path.join(cwd, out_path))
+                
+            # os.chdir(cwd)
 
         return out_path
     
@@ -881,7 +881,8 @@ wd = os.getcwd()
 
 
 for date in date_list:
-    
+    print(date)
+    print(season_number)
     env_path = download_data(
                     crop = "NA",
                     season = season_number,
@@ -941,7 +942,7 @@ except Exception as e:
 
     print(f"An error occurred processing point clouds, a subdirectory may be an incomplete pair: {e}")
 
-for (dir_path, ply_files, date_time) in zip(all_dirs, all_ply_files, formatted_datetimes):
+for (direc_path, ply_files, date_time) in zip(all_dirs, all_ply_files, formatted_datetimes):
 
     if len(ply_files) == 2:
 
@@ -957,7 +958,7 @@ for (dir_path, ply_files, date_time) in zip(all_dirs, all_ply_files, formatted_d
                 if "east" in item:
                     # Measure the time it takes to read the east point cloud
                     start = time.time()
-                    east_pcd = o3d.io.read_point_cloud(os.path.join(local_path, dir_path, item),
+                    east_pcd = o3d.io.read_point_cloud(os.path.join(local_path, direc_path, item),
                                                        remove_nan_points=True,
                                                        remove_infinite_points=True)
                     end = time.time()
@@ -973,7 +974,7 @@ for (dir_path, ply_files, date_time) in zip(all_dirs, all_ply_files, formatted_d
                 elif "west" in item:
                     # Measure the time it takes to read the west point cloud
                     start = time.time()
-                    west_pcd = o3d.io.read_point_cloud(os.path.join(local_path, dir_path, item),
+                    west_pcd = o3d.io.read_point_cloud(os.path.join(local_path, direc_path, item),
                                                        remove_nan_points=True,
                                                        remove_infinite_points=True)
                     end = time.time()
@@ -985,13 +986,13 @@ for (dir_path, ply_files, date_time) in zip(all_dirs, all_ply_files, formatted_d
                     end = time.time()
                     print(f'Time taken to downsample {item}: {end - start:.2f} seconds')
             
-                meta_path = os.path.join(local_path, dir_path, '_'.join([item.split('__')[0], 'metadata.json']))
+                meta_path = os.path.join(local_path, direc_path, '_'.join([item.split('__')[0], 'metadata.json']))
 
             print(f'Opening metadata file {meta_path}.')
             metadata = load_metadata_dict(meta_path)
 
             # Get filename
-            filename = '/'.join([dir_path, item.split('__')[0]])
+            filename = '/'.join([direc_path, item.split('__')[0]])
             
             # Get row index of dataframe
             row_index = result.loc[result['filename'] == item.split('__')[0]].index[0]

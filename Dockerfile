@@ -98,7 +98,9 @@ RUN echo "deb [arch=amd64] https://packages.irods.org/apt/ $(lsb_release -sc) ma
 
 RUN apt-get update && apt-get install -y irods-runtime irods-icommands
 
-RUN echo "phytooracle" > /etc/irods/service_account.config && \
+RUN mkdir -p /etc/irods && \
+    touch /etc/irods/service_account.config && \
+    echo "phytooracle" > /etc/irods/service_account.config && \
     echo "mac_scanalyzer" >> /etc/irods/service_account.config
 
 ENTRYPOINT [ "/usr/local/bin/python3.7", "/opt/transformation_gui.py" ]

@@ -13,7 +13,6 @@ from tkinter import filedialog
 import tarfile
 import os
 import sys
-# from open3d.visualization import VisualizerWithKeyCallback
 import numpy as np
 import copy
 import time
@@ -31,9 +30,9 @@ import utm
 import glob
 from multiprocessing import Pool
 
-sys.setrecursionlimit(10000) # Set the maximum recursion depth to 10000
+sys.setrecursionlimit(10000)
 
-# --------------------------------------------------
+#-------------------------------------------------------------------------------
 def select_dir_path(dir_paths):
     root = tk.Tk()
     root.withdraw()
@@ -80,7 +79,7 @@ def select_dir_path(dir_paths):
     return selected_dir_path
 
 
-# --------------------------------------------------
+#-------------------------------------------------------------------------------
 def select_tar_file(tar_files):
     root = tk.Tk()
     root.withdraw()
@@ -127,7 +126,7 @@ def select_tar_file(tar_files):
     return selected_tar_file
 
 
-# --------------------------------------------------
+#-------------------------------------------------------------------------------
 def ransac_transform_and_get_inliers(args):
 
     source_down_points = args[0]
@@ -162,7 +161,7 @@ def ransac_transform_and_get_inliers(args):
     return tr_x,tr_y,tr_z,number_matched_points
 
 
-# --------------------------------------------------
+#-------------------------------------------------------------------------------
 def execute_manual_location_based_RANSAC(source_down,target_down,num_samples,voxel_size=1,coefs=[2,1,1,1]):
 
     tr_mean = (0,0,0)
@@ -198,13 +197,13 @@ def execute_manual_location_based_RANSAC(source_down,target_down,num_samples,vox
     return (best_x,best_y,best_z)
 
 
-# --------------------------------------------------
+#-------------------------------------------------------------------------------
 def translate_pcd(pcd,x,y,z):
     transformed_pcd = copy.deepcopy(pcd).translate((x,y,z))
     return transformed_pcd
 
 
-# --------------------------------------------------
+#-------------------------------------------------------------------------------
 def merge_east_west_ransac(east,west,down_east,down_west):
     tr = execute_manual_location_based_RANSAC(down_east,down_west,400,coefs=[5,5,0.1,0.5])
     
@@ -224,7 +223,7 @@ def merge_east_west_ransac(east,west,down_east,down_west):
     return merged,merged_down,new_east,new_east_down
 
 
-# --------------------------------------------------
+#-------------------------------------------------------------------------------
 def rotate_pcd(pcd ,rotation_theta=90, center_pcd=None):
 
     theta = np.radians(rotation_theta)
@@ -253,7 +252,7 @@ def rotate_pcd(pcd ,rotation_theta=90, center_pcd=None):
     return rotated_pcd
 
 
-# --------------------------------------------------
+#-------------------------------------------------------------------------------
 def load_metadata_dict(path):
     
     with open(path) as f:
@@ -262,7 +261,7 @@ def load_metadata_dict(path):
     return meta
 
 
-# --------------------------------------------------
+#-------------------------------------------------------------------------------
 def get_direction(x_position: float) -> str:
     if x_position < 216:
         return "south"
@@ -270,7 +269,7 @@ def get_direction(x_position: float) -> str:
         return "north"
 
 
-# --------------------------------------------------
+#-------------------------------------------------------------------------------
 def save_transformation(vis, source, target, transformations):
     trans_init = source.get_rotation_matrix_from_xyz((0, 0, 0)) @ np.linalg.inv(target.get_rotation_matrix_from_xyz((0, 0, 0)))
     transformations.append(trans_init)
@@ -283,7 +282,7 @@ def save_transformation(vis, source, target, transformations):
     del target
 
 
-# --------------------------------------------------
+#-------------------------------------------------------------------------------
 def update_view(vis, highest_point):
 
     ctr = vis.get_view_control()
@@ -291,14 +290,14 @@ def update_view(vis, highest_point):
     return False
 
 
-# --------------------------------------------------
+#-------------------------------------------------------------------------------
 def update_visualization(vis, source):
     vis.update_geometry(source)
     vis.poll_events()
     vis.update_renderer()
 
 
-# --------------------------------------------------
+#-------------------------------------------------------------------------------
 def move_left(vis, source, size=1):
     global cum_trans
     trans = np.eye(4)
@@ -306,10 +305,10 @@ def move_left(vis, source, size=1):
     cum_trans = np.dot(trans,cum_trans)
     source.transform(trans)
     update_visualization(vis, source)
-    print(cum_trans)
+    # print(cum_trans)
 
 
-# --------------------------------------------------
+#-------------------------------------------------------------------------------
 def move_right(vis, source, size=1):
     global cum_trans
     trans = np.eye(4)
@@ -317,10 +316,10 @@ def move_right(vis, source, size=1):
     cum_trans = np.dot(trans,cum_trans)
     source.transform(trans)
     update_visualization(vis, source)
-    print(cum_trans)
+    # print(cum_trans)
 
 
-# --------------------------------------------------
+#-------------------------------------------------------------------------------
 def move_up(vis, source, size=1):
     global cum_trans
     trans = np.eye(4)
@@ -328,10 +327,10 @@ def move_up(vis, source, size=1):
     cum_trans = np.dot(trans,cum_trans)
     source.transform(trans)
     update_visualization(vis, source)
-    print(cum_trans)
+    # print(cum_trans)
 
 
-# --------------------------------------------------
+#-------------------------------------------------------------------------------
 def move_down(vis, source, size=1):
     global cum_trans
     trans = np.eye(4)
@@ -339,10 +338,10 @@ def move_down(vis, source, size=1):
     cum_trans = np.dot(trans,cum_trans)
     source.transform(trans)
     update_visualization(vis, source)
-    print(cum_trans)
+    # print(cum_trans)
 
 
-# --------------------------------------------------
+#-------------------------------------------------------------------------------
 def move_forward(vis, source, size=1):
     global cum_trans
     trans = np.eye(4)
@@ -350,10 +349,10 @@ def move_forward(vis, source, size=1):
     cum_trans = np.dot(trans,cum_trans)
     source.transform(trans)
     update_visualization(vis, source)
-    print(cum_trans)
+    # print(cum_trans)
 
 
-# --------------------------------------------------
+#-------------------------------------------------------------------------------
 def move_backward(vis, source, size=1):
     global cum_trans
     trans = np.eye(4)
@@ -361,17 +360,17 @@ def move_backward(vis, source, size=1):
     cum_trans = np.dot(trans,cum_trans)
     source.transform(trans)
     update_visualization(vis, source)
-    print(cum_trans)
+    # print(cum_trans)
 
 
-# --------------------------------------------------
+#-------------------------------------------------------------------------------
 def next_pair(vis):
 
     vis.clear_geometries()
     vis.close()
 
 
-# --------------------------------------------------
+#-------------------------------------------------------------------------------
 def save_transform_and_move_to_next_pair(vis,cumulative_transform,list_of_transforms, index, i):
 
     global e_pressed
@@ -383,7 +382,7 @@ def save_transform_and_move_to_next_pair(vis,cumulative_transform,list_of_transf
     next_pair(vis)
 
 
-# --------------------------------------------------
+#-------------------------------------------------------------------------------
 def close_window(vis):
     if e_pressed:
         print('Closing window.')
@@ -395,7 +394,7 @@ def close_window(vis):
         print("Please press 'E' before quitting")
 
 
-# --------------------------------------------------
+#-------------------------------------------------------------------------------
 def remove_directory(dir_path):
 
     try:
@@ -405,7 +404,7 @@ def remove_directory(dir_path):
         print(f'Error removing {dir_path}: {e}')
 
 
-# --------------------------------------------------
+#-------------------------------------------------------------------------------
 def remove_file(file_path):
     try:
         os.remove(file_path)
@@ -414,7 +413,7 @@ def remove_file(file_path):
         print(f'Error removing {file_path}: {e}')
 
 
-# --------------------------------------------------
+#-------------------------------------------------------------------------------
 def colorize_point_cloud(pcd, cmap):
 
     # Get the points as a numpy array
@@ -428,13 +427,14 @@ def colorize_point_cloud(pcd, cmap):
     pcd.colors = o3d.utility.Vector3dVector(colors)
 
 
-# --------------------------------------------------
+#-------------------------------------------------------------------------------
 def extract_date(string: str) -> str:
     match = re.search(r'\d{4}-\d{2}-\d{2}', string)
     if match:
         return match.group()
     else:
         return "No date found in the string"
+
 
 #-------------------------------------------------------------------------------
 def get_env_dates(date_string):
@@ -457,6 +457,7 @@ def get_env_dates(date_string):
     
         return [day_before, date, day_after]
 
+
 #-------------------------------------------------------------------------------
 def get_file_list(data_path, sequence):
     '''
@@ -474,6 +475,7 @@ def get_file_list(data_path, sequence):
 
     return files
 
+
 #-------------------------------------------------------------------------------
 def download_files(item, out_path):
     '''
@@ -485,7 +487,7 @@ def download_files(item, out_path):
     Output: 
         - Downloaded and extracted data within the specified output directory 
     '''
-        
+    cwd = os.getcwd()
     os.chdir(out_path)
 
     if not 'deprecated' in item:
@@ -505,37 +507,44 @@ def download_files(item, out_path):
 
             print(f"Found item {item}.")
 
-            if not os.path.isdir(date):
-                print(f"Making directory {date}.")
-                os.makedirs(date)
+            if not os.path.exists(os.path.join(cwd, out_path, date)):
 
+                if not os.path.isdir(date):
+                    print(f"Making directory {date}.")
+                    os.makedirs(date)
 
-            if '.tar.gz' in item: 
                 print(f"Downloading {item}.")
                 sp.call(f'iget -KPVT {item}', shell=True)
 
-                print(f"Extracting {item}.")
-                ret = sp.call(f'tar -xzvf {os.path.basename(item)} -C {date}', shell=True)
-                # ret = sp.call(f'tar -c --use-compress-program=pigz -f {os.path.basename(item)}', shell=True) #-C {date} 
+                if '.tar.gz' in item: 
+                    # print(f"Downloading {item}.")
+                    # sp.call(f'iget -KPVT {item}', shell=True)
 
-                if ret != 0:
-                    print(f"Reattempting to extract {item}.")
+                    print(f"Extracting {item}.")
+                    ret = sp.call(f'tar -xzvf {os.path.basename(item)} -C {date}', shell=True)
+                    # ret = sp.call(f'tar -c --use-compress-program=pigz -f {os.path.basename(item)}', shell=True) #-C {date} 
+
+                    if ret != 0:
+                        print(f"Reattempting to extract {item}.")
+                        sp.call(f'tar -xvf {os.path.basename(item)} -C {date}', shell=True)
+
+                    sp.call(f'rm {os.path.basename(item)}', shell=True)
+
+                elif '.tar' in item:
+                    # print(f"Downloading {item}.")
+                    # sp.call(f'iget -KPVT {item}', shell=True)
+                    
+                    print(f"Extracting {item}.")
                     sp.call(f'tar -xvf {os.path.basename(item)} -C {date}', shell=True)
+                    sp.call(f'rm {os.path.basename(item)}', shell=True)
 
-                sp.call(f'rm {os.path.basename(item)}', shell=True)
-
-            elif '.tar' in item:
-                print(f"Downloading {item}.")
-                sp.call(f'iget -KPVT {item}', shell=True)
-                
-                print(f"Extracting {item}.")
-                sp.call(f'tar -xvf {os.path.basename(item)} -C {date}', shell=True)
-                sp.call(f'rm {os.path.basename(item)}', shell=True)
+                else:
+                    os.chdir(date)
+                    sp.call(f'iget -KPVT {item}', shell=True)
 
             else:
-                os.chdir(date)
-                sp.call(f'iget -KPVT {item}', shell=True)
-            
+                print(f'{os.path.basename(item)} already exists. Skipping download.')
+
         except:
             pass
 
@@ -627,7 +636,13 @@ def download_data(crop, season, level, sensor, sequence, cwd, outdir, download=T
             for item in files: 
                 print(f'Downloading {item}.')
                 download_files(item=item, out_path=os.path.join(cwd, out_path))
-                
+            # for item in files:
+            #     if not os.path.exists(os.path.join(cwd, out_path, item)):
+            #         print(f'Downloading {item}.')
+            #         download_files(item=item, out_path=os.path.join(cwd, out_path))
+            #     else:
+            #         print(f'{item} already exists. Skipping download.')
+
             # os.chdir(cwd)
 
         return out_path
@@ -820,13 +835,14 @@ def get_environment_df(data_path):
     env_df = pd.concat(dfs, ignore_index=True)
     return env_df.sort_values('time')
 
+
 #-------------------------------------------------------------------------------
-def custom_sort(file):
+def custom_sort(file, all_dirs):
     # extract the directory name from the file path
     directory = os.path.dirname(file)
-    # find the index of the directory in the dirs list
+    # find the index of the directory in the all_dirs list
     try:
-        index = dirs.index(directory)
+        index = all_dirs.index(directory)
     except ValueError:
         # return a default value for files without a parent directory
         index = -1
@@ -881,8 +897,7 @@ wd = os.getcwd()
 
 
 for date in date_list:
-    print(date)
-    print(season_number)
+
     env_path = download_data(
                     crop = "NA",
                     season = season_number,
@@ -891,6 +906,7 @@ for date in date_list:
                     sequence = f'{date}.tar.gz',
                     cwd = wd,
                     outdir = 'environment_logger')
+                    # download=False)
     
     os.chdir(wd)
 
@@ -903,33 +919,29 @@ env_df = get_environment_df(data_path = os.path.join(env_path, '*', '*', '*.json
 # Create an empty list to store each pair of point clouds
 pcd_pairs = []
 pcd_directions = []
-# fields = []
-# z_positions = []
 filenames = []
-
-# all_subdirs = []
+negative_filenames = []
+positive_filenames = []
 all_dirs = []
 all_ply_files = []
 
 for subdir, dirs, files in os.walk(local_path):
 
     dirs.sort()
-    files.sort(key=custom_sort)
-    # all_subdirs.extend(subdir)
     all_dirs.extend(dirs)
+
+    files.sort(key=lambda file: custom_sort(file, all_dirs))
     ply_files = [file for file in files if file.endswith(".ply")]
+
     if len(ply_files) == 2:
         all_ply_files.append(tuple(ply_files))
-    # else:
-    #     all_ply_files.append(())
-    # json_files = [file for file in files if file.endswith(".json")]
 
-# all_dirs.sort()
 date_format = '%Y-%m-%d__%H-%M-%S-%f'
 datetimes = [datetime.strptime(d, date_format) for d in all_dirs]
 formatted_datetimes = [dt.strftime('%Y-%m-%d %H:%M:%S') for dt in datetimes]
 
 base_filenames = [name[0].split('__')[0] for name in all_ply_files]
+print(base_filenames)
 
 try:
 
@@ -1009,12 +1021,10 @@ for (direc_path, ply_files, date_time) in zip(all_dirs, all_ply_files, formatted
 
             # Add filename, field locations, and box heights to lists
             filenames.append(filename)
-            # fields.append(field)
-            # z_positions.append(z_position)
 
             print('Rotating point clouds.')
-            new_east_down = rotate_pcd(down_east_pcd,90) #,merged_down_pcd)
-            new_west_down = rotate_pcd(down_west_pcd,90) #,merged_down_pcd)
+            new_east_down = rotate_pcd(down_east_pcd,90)
+            new_west_down = rotate_pcd(down_west_pcd,90)
 
             if metadata['gantry_system_variable_metadata']['scanIsInPositiveDirection'] == "False":
 
@@ -1022,12 +1032,15 @@ for (direc_path, ply_files, date_time) in zip(all_dirs, all_ply_files, formatted
                 new_west_down = new_west_down.translate([0,(float(metadata['gantry_system_variable_metadata']['position x [m]'])-3.798989)/(8.904483-7.964989)*1000,0])
                 pcd_direction = "Negative"
                 pcd_directions.append(pcd_direction)
+                negative_filenames.append(filename)
+
             else:
 
                 new_east_down = new_east_down.translate([22280.82692587,(float(metadata['gantry_system_variable_metadata']['position x [m]'])-3.798989)/(8.904483-7.964989)*1000,0])
                 new_west_down = new_west_down.translate([22280.82692587,(float(metadata['gantry_system_variable_metadata']['position x [m]'])-3.798989)/(8.904483-7.964989)*1000,0])
                 pcd_direction = "Positive"
                 pcd_directions.append(pcd_direction)
+                positive_filenames.append(filename)
 
             # Save results to dataframe
             result.loc[row_index, 'field'] = field
@@ -1071,9 +1084,6 @@ for i, (source, target) in enumerate(pcd_pairs):
     colorize_point_cloud(source, "viridis")
     colorize_point_cloud(source_copy, "viridis")
     colorize_point_cloud(target, "plasma")
-    # source.paint_uniform_color([1, 0.706, 0])
-    # source_copy.paint_uniform_color([1, 0.706, 0])
-    # target.paint_uniform_color([0, 0.651, 0.929])  
 
     # Set up the visualization
     print("Press 'W', 'A', 'S', 'D', 'R', or 'F' to move the source point cloud")
@@ -1083,8 +1093,6 @@ for i, (source, target) in enumerate(pcd_pairs):
 
     vis = o3d.visualization.VisualizerWithKeyCallback()
     vis.create_window()
-    # vis.toggle_full_screen()
-    # Application.instance.run()
 
     # Add point clouds
     vis.add_geometry(source_copy)
@@ -1170,9 +1178,6 @@ for i in range(len(merged_point_clouds)-1):
         colorize_point_cloud(source, "viridis")
         colorize_point_cloud(source_copy, "viridis")
         colorize_point_cloud(target, "plasma")
-        # source.paint_uniform_color([1, 0.706, 0])
-        # source_copy.paint_uniform_color([1, 0.706, 0])
-        # target.paint_uniform_color([0, 0.651, 0.929])  
         
         # Set up the visualization
         print("Press 'W', 'A', 'S', 'D', 'R', or 'F' to move the source point cloud")
@@ -1231,16 +1236,12 @@ with h5py.File(os.path.join(out_dir, f'{local_path_date}_transformations.h5'), '
     ew_positive_trans = ew_trans.create_group('positive')
     for i, transformation in enumerate(ew_positive_final_transformations):
         ew_idx = ew_index[i]
-        ew_positive_trans.create_dataset(filenames[ew_idx], data=transformation) #.split('/')[1]
+        ew_positive_trans.create_dataset(positive_filenames[i], data=transformation)
 
     ew_negative_trans = ew_trans.create_group('negative')
     for i, transformation in enumerate(ew_negative_final_transformations):
         ew_idx = ew_index[i]
-        ew_negative_trans.create_dataset(filenames[ew_idx], data=transformation) #.split('/')[1]
-
-    # ew_individual_grp.create_dataset('fields', data=fields)
-    # ew_individual_grp.create_dataset('z_positions', data=z_positions)
-    # ew_individual_grp.create_dataset('filenames', data=filenames, dtype=h5py.special_dtype(vlen=str))
+        ew_negative_trans.create_dataset(negative_filenames[i], data=transformation)
     
     ew_average_grp = ew_grp.create_group('average')
     ew_negative_average_grp = ew_average_grp.create_group('negative')
@@ -1253,10 +1254,7 @@ with h5py.File(os.path.join(out_dir, f'{local_path_date}_transformations.h5'), '
     ns_trans = ns_individual_grp.create_group('transformations')
     for i, transformation in enumerate(ns_final_transformations):
         ns_idx = ns_index[i]
-        ns_trans.create_dataset(filenames[ns_idx], data=transformation) #.split('/')[1]
-    # ns_individual_grp.create_dataset('fields', data=fields)
-    # ns_individual_grp.create_dataset('z_positions', data=z_positions)
-    # ns_individual_grp.create_dataset('filenames', data=filenames, dtype=h5py.special_dtype(vlen=str))
+        ns_trans.create_dataset(filenames[ns_idx], data=transformation)
 
     ns_average_grp = ns_grp.create_group('average')
     ns_average_grp.create_dataset('transformation', data=ns_final_transformation)

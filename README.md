@@ -30,4 +30,5 @@ After selecting a season and scan date, the GUI visualizes the point clouds usin
 - Quit: Q
 
 > **_NOTE:_** The user must hit `E` to save the transformation before hitting `Q` to move to the next pair. If the user does not want a pair to be included in the transformation calculation, they must hit `I` to ignore the pair and move to the next pair.
+
 > **_NOTE:_** The user must ensure CAPS lock is disabled.

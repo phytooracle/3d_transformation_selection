@@ -569,7 +569,8 @@ def get_dict():
             '12': 'season_12_sorghum_soybean_sunflower_tepary_yr_2021',
             '13': 'season_13_lettuce_yr_2022',
             '14': 'season_14_sorghum_yr_2022',
-            '15': 'season_15_lettuce_yr_2022'
+            '15': 'season_15_lettuce_yr_2022',
+            '16': 'season_16_sorghum_yr_2023'
         },
 
         'level': {
@@ -861,7 +862,8 @@ dir_paths = {
     "Season 12": "/iplant/home/shared/phytooracle/season_12_sorghum_soybean_sunflower_tepary_yr_2021/level_0/scanner3DTop/",
     "Season 13": "/iplant/home/shared/phytooracle/season_13_lettuce_yr_2022/level_0/scanner3DTop/",
     "Season 14": "/iplant/home/shared/phytooracle/season_14_sorghum_yr_2022/level_0/scanner3DTop/",
-    "Season 15": "/iplant/home/shared/phytooracle/season_15_lettuce_yr_2022/level_0/scanner3DTop/"
+    "Season 15": "/iplant/home/shared/phytooracle/season_15_lettuce_yr_2022/level_0/scanner3DTop/",
+    "Season 16": "/iplant/home/shared/phytooracle/season_16_sorghum_yr_2023/level_0/scanner3DTop/"
 }
 
 # Select season

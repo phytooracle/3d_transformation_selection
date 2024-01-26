@@ -894,29 +894,29 @@ if not os.path.isdir(local_path):
 
 # Download Environment Logger data
 date_species  = local_path.replace('scanner3DTop-', '')
-date_list = get_env_dates(date_string = date_species)
+# date_list = get_env_dates(date_string = date_species)
 wd = os.getcwd()
 
 
-for date in date_list:
+# for date in date_list:
 
-    env_path = download_data(
-                    crop = "NA",
-                    season = season_number,
-                    level = '0',
-                    sensor = 'ENV',
-                    sequence = f'{date}.tar.gz',
-                    cwd = wd,
-                    outdir = 'environment_logger')
-                    # download=False)
+#     env_path = download_data(
+#                     crop = "NA",
+#                     season = season_number,
+#                     level = '0',
+#                     sensor = 'ENV',
+#                     sequence = f'{date}.tar.gz',
+#                     cwd = wd,
+#                     outdir = 'environment_logger')
+#                     # download=False)
     
-    os.chdir(wd)
+#     os.chdir(wd)
 
 # Get gantry metadata
 meta_df = get_date_position(data_path = os.path.join(local_path, '*', '*', '*.json'))
 
-# Open environmental logger data
-env_df = get_environment_df(data_path = os.path.join(env_path, '*', '*', '*.json'))
+# # Open environmental logger data
+# env_df = get_environment_df(data_path = os.path.join(env_path, '*', '*', '*.json'))
 
 # Create an empty list to store each pair of point clouds
 pcd_pairs = []
@@ -949,8 +949,8 @@ try:
 
     df = pd.DataFrame({'time': formatted_datetimes, 'directories': all_dirs, 'filename': base_filenames})
     df['time'] = pd.to_datetime(df['time'])
-
-    result = pd.merge_asof(df, env_df, on='time', direction='nearest', tolerance=pd.Timedelta("1m"))
+    result = df
+    # result = pd.merge_asof(df, env_df, on='time', direction='nearest', tolerance=pd.Timedelta("1m"))
 
 except Exception as e:
 
@@ -959,7 +959,7 @@ except Exception as e:
 for (direc_path, ply_files, date_time) in zip(all_dirs, all_ply_files, formatted_datetimes):
 
     if len(ply_files) == 2:
-
+        
         iter_df = result[result['time']==date_time]
 
         try:
@@ -1273,5 +1273,5 @@ subprocess.run(f"imkdir -p {cyverse_out_path} && icd {cyverse_out_path} && iput 
 # Clean working directory
 remove_directory(dir_path='scanner3DTop_Transformations')
 remove_directory(dir_path=local_path)
-remove_directory(dir_path='environment_logger')
+# remove_directory(dir_path='environment_logger')
 remove_file(file_path=selected_tar_file)

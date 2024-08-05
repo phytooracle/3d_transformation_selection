@@ -570,7 +570,9 @@ def get_dict():
             '13': 'season_13_lettuce_yr_2022',
             '14': 'season_14_sorghum_yr_2022',
             '15': 'season_15_lettuce_yr_2022',
-            '16': 'season_16_sorghum_yr_2023'
+            '16': 'season_16_sorghum_yr_2023',
+            '17': 'season_17_lettuce_yr_2023',
+            '18': 'season_18_sorghum_yr_2024'
         },
 
         'level': {

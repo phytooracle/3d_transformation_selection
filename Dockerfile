@@ -82,11 +82,11 @@ RUN apt-get update -y \
     && apt-get upgrade -y
 
 RUN wget -c \
-    http://security.ubuntu.com/ubuntu/pool/main/o/openssl/libssl1.1_1.1.1f-1ubuntu2.20_amd64.deb
+    http://archive.ubuntu.com/ubuntu/pool/main/o/openssl/libssl1.1_1.1.1f-1ubuntu2_amd64.deb
 RUN apt-get install -y \
-    ./libssl1.1_1.1.1f-1ubuntu2.20_amd64.deb
+    ./libssl1.1_1.1.1f-1ubuntu2_amd64.deb
 RUN rm -rf \
-    ./libssl1.1_1.1.1f-1ubuntu2.20_amd64.deb
+    ./libssl1.1_1.1.1f-1ubuntu2_amd64.deb
 
 RUN apt install -y irods-icommands
 RUN mkdir -p /root/.irods

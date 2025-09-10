@@ -869,6 +869,7 @@ dir_paths = {
     "Season 16": "/iplant/home/shared/phytooracle/season_16_sorghum_yr_2023/level_0/scanner3DTop/",
     "Season 17": "/iplant/home/shared/phytooracle/season_17_lettuce_yr_2023/level_0/scanner3DTop/",
     "Season 18": "/iplant/home/shared/phytooracle/season_18_sorghum_yr_2024/level_0/scanner3DTop/",
+    "Season 19": "/iplant/home/shared/phytooracle/season_19_sorghum_cotton_yr_2025/level_0/scanner3DTop/
 }
 
 # Select season
